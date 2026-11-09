@@ -1331,7 +1331,7 @@ function surfAt(x,z){                               // 'asphalt' | 'grip' | 'ker
   return 'grass';
 }
 const SURFP={asphalt:{mu:1.01,crr:0.015},grip:{mu:1.05,crr:0.015},patch:{mu:1.18,crr:0.015},gravel:{mu:0.72,crr:0.06},kerb:{mu:0.93,crr:0.022},sand:{mu:0.62,crr:0.20},grass:{mu:0.58,crr:0.09},water:{mu:0.45,crr:0.45}};
-const KM={m:155,Iz:42,a:0.60,b:0.44,mu0:1.95,P:10000,Fdrive:780,CdA:0.55,hcg:0.22,B:26,C:1.25,fF:1.0,fR:1.0,axle:4,vmax:27.8};   // owner: 'match or beat' the real T4 times - 225cc ~15 hp (~10 kW at the wheels), rev-limited ~100 km/h (55-65 mph), grip calibrated to the KartPlex T4 Senior lap (47.3 s, 2025 Cup R3)   // owner: understeer - neutral front/rear grip, sharper tyre (peak slip ~6.7 deg), lighter axle scrub (relieved further by inside-rear lift)
+const KM={m:155,Iz:42,a:0.60,b:0.44,mu0:2.1,P:11000,Fdrive:780,CdA:0.55,hcg:0.22,B:26,C:1.25,fF:1.0,fR:1.0,axle:4,vmax:27.8};   // owner: 'match or beat' the real T4 times - 225cc ~15 hp (~10 kW at the wheels), rev-limited ~100 km/h (55-65 mph), grip calibrated to the KartPlex T4 Senior lap (47.3 s, 2025 Cup R3)   // owner: understeer - neutral front/rear grip, sharper tyre (peak slip ~6.7 deg), lighter axle scrub (relieved further by inside-rear lift)
 function tyre(alpha,mu,N){ return mu*N*Math.sin(KM.C*Math.atan(KM.B*alpha)); }
 function nearestLine(x,z,guess){                    // local search along the racing line for progress / reset
   let bi=guess,bd=1e9,n=LINE.length; for(let k=-60;k<=60;k++){ const i=((guess+k)%n+n)%n, d=(LINE[i][0]-x)**2+(LINE[i][1]-z)**2; if(d<bd){bd=d;bi=i;} }
