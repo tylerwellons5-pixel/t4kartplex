@@ -1336,6 +1336,42 @@ function tyre(alpha,mu,N){ return mu*N*Math.sin(KM.C*Math.atan(KM.B*alpha)); }
 function nearestLine(x,z,guess){                    // local search along the racing line for progress / reset
   let bi=guess,bd=1e9,n=LINE.length; for(let k=-60;k<=60;k++){ const i=((guess+k)%n+n)%n, d=(LINE[i][0]-x)**2+(LINE[i][1]-z)**2; if(d<bd){bd=d;bi=i;} }
   if(bd>400){ for(let i=0;i<n;i++){ const d=(LINE[i][0]-x)**2+(LINE[i][1]-z)**2; if(d<bd){bd=d;bi=i;} } } return bi; }
+/* ---------- track limits = the white lines (owner: 'im beating the ghost which shouldnt be happening'). The AI ghost
+   (lineopt.js) may only use the track up to the painted edge plus a kerb; the player could use any asphalt past the
+   lines (link roads, run-off to the wall, extra asphalt). Same rule for both now: for every metre of the racing line the
+   legal half-widths left / right run to the painted line (+0.15 m, the line itself is track) or, where a kerb sits past
+   the line, to the outer edge of the kerb. Openings with no paint (link roads, pit lane) are closed with the local
+   track width. A lap is invalid when all four wheels are past those limits. ---------- */
+const TL={l:null,r:null,ready:false,building:false};
+async function buildTrackLimits(){
+  if(TL.building||!LINE.length||!SURF.ready) return; TL.building=true;
+  try{ const d=await (await fetch('data/limits.json')).json();               // built offline from the painted lines (limits_build.py)
+    if(d&&d.left&&d.left.length===LINE.length){ TL.l=Float32Array.from(d.left); TL.r=Float32Array.from(d.right); TL.ready=true;
+      console.log('[T4] track limits = the white lines (limits.json)'); return; } }catch(e){}
+  const paint=await (await fetch('data/paint.json')).json(), grid=new Map();
+  for(const r of paint.edge) for(let i=1;i<r.length;i++){ const a=r[i-1],b=r[i],L=Math.hypot(b[0]-a[0],b[1]-a[1]),m=Math.max(1,Math.ceil(L/0.05));
+    for(let k=0;k<=m;k++){ const x=a[0]+(b[0]-a[0])*k/m, z=-(a[1]+(b[1]-a[1])*k/m), key=Math.floor(x)+','+Math.floor(z); (grid.get(key)||grid.set(key,[]).get(key)).push(x,z); } }
+  const nearPaint=(x,z)=>{ for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++){ const L=grid.get((Math.floor(x)+i)+','+(Math.floor(z)+j)); if(!L) continue;
+    for(let k=0;k<L.length;k+=2){ const dx=L[k]-x,dz=L[k+1]-z; if(dx*dx+dz*dz<0.0081) return true; } } return false; };
+  const N=LINE.length, raw=[new Float32Array(N),new Float32Array(N)], ON=new Set(['asphalt','grip','patch','kerb']);
+  for(let i=0;i<N;i++){ const a=LINE[(i-1+N)%N], b=LINE[(i+1)%N], L=Math.hypot(b[0]-a[0],b[1]-a[1])||1, fx=(b[0]-a[0])/L, fz=(b[1]-a[1])/L;
+    [[fz,-fx],[-fz,fx]].forEach(([nx,nz],sd)=>{ let crossed=-1, lim=-1;
+      for(let d=0.1;d<=9.0;d+=0.1){ const x=LINE[i][0]+nx*d, z=LINE[i][1]+nz*d, q=surfAt(x,z);
+        if(crossed<0&&nearPaint(x,z)) crossed=d;
+        if(crossed>=0){ if(q==='kerb'&&d<crossed+1.1){ lim=d; continue; } lim=Math.max(lim,crossed+0.15); break; }
+        if(!ON.has(q)){ lim=d; break; } }
+      raw[sd][i]=lim<0?9.0:lim; }); }
+  const close=A=>{ const B=new Float32Array(N); for(let i=0;i<N;i++){ const w=[]; for(let k=-15;k<=15;k++) w.push(A[(i+k+N)%N]); w.sort((p,q)=>p-q);
+      B[i]=Math.min(A[i],w[15]+0.6); } return B; };                 // a paint-less opening (link road, pit lane) is closed at the local width
+  TL.l=close(raw[0]); TL.r=close(raw[1]); TL.ready=true;
+  console.log('[T4] track limits from the painted lines: half-width median',(()=>{ const w=Array.from(TL.l).map((v,i)=>v+TL.r[i]).sort((a,b)=>a-b); return w[w.length>>1].toFixed(2); })(),'m');
+}
+function pastLimits(x,z){                             // true when this point is beyond the painted limits
+  if(!TL.ready) return false;
+  const N=LINE.length, i=nearestLine(x,z,DRV.sIdx), a=LINE[(i-1+N)%N], b=LINE[(i+1)%N], L=Math.hypot(b[0]-a[0],b[1]-a[1])||1, fx=(b[0]-a[0])/L, fz=(b[1]-a[1])/L;
+  const o=(x-LINE[i][0])*fz+(z-LINE[i][1])*(-fx);          // + = left
+  return o>0 ? o>TL.l[i]+0.08 : -o>TL.r[i]+0.08;              // the whole tyre (~0.16 m wide) past the limit
+}
 let T_IDX=0;
 function driveStart(fromGrid){
   driveInit(); if(!LINE.length) return;
@@ -1492,7 +1528,8 @@ function physics(h){
   if(imp>0){ DRV.kj=Math.min(1,(DRV.kj||0)+imp*2.2); DRV.rr+=(Math.random()-0.5)*imp*1.6-side*0.5;     // jolt: unsettles the kart
     const sc=Math.max(0.97,1-imp*0.12); DRV.vx*=sc; DRV.vz*=sc; shake=Math.max(shake,Math.min(0.03,imp*0.05)); }
   DRV.kj=(DRV.kj||0)*Math.exp(-h*7);
-  const offAll=S.every(q=>q==='grass'||q==='sand'||q==='gravel'||q==='water');
+  if(!TL.ready&&SURF.ready&&LINE.length) buildTrackLimits();
+  const offAll=S.every(q=>q==='grass'||q==='sand'||q==='gravel'||q==='water') || (TL.ready&&WP.every(p=>pastLimits(p[0],p[1])));   // all four wheels off the track or past the white lines
   if(offAll&&DRV.lapOn&&DRV.valid){ DRV.valid=false; flash('Track limits - lap invalid'); }
   // inputs
   const dmax=0.34/(1+u*u/(PADC.wheel?1600:420)), delta=DRV.steer*dmax;     // owner: steering turned down (0.42 -> 0.34 rad max); wheel steers direct, pad keeps a light cap
@@ -1566,7 +1603,7 @@ addEventListener('keydown',e=>{ if(mode!=='drive') return; if(['ArrowUp','ArrowD
   if(e.code==='KeyM') muted=!muted; });
 addEventListener('gamepadconnected',e=>flash((/dualsense|wireless controller|054c|playstation|ps5/i.test(e.gamepad.id)?'PS5 controller':'Controller')+' connected - press Drive kart, R2 gas / L2 brake'));
 addEventListener('gamepaddisconnected',()=>flash('Controller disconnected'));
-window.__t4drive={DRV,physics,lapLogic,surfAt,driveStart,KM,SURFP,kerbH,PADC,GHOST,get mode(){return mode;},get LINE(){return LINE;},get SPD(){return SPD;},get CUM(){return CUM;},get TOTAL(){return TOTAL;},get ready(){return SURF.ready&&WGRID.size>0;}};   // test hook
+window.__t4drive={TL,pastLimits,buildTrackLimits,DRV,physics,lapLogic,surfAt,driveStart,KM,SURFP,kerbH,PADC,GHOST,get mode(){return mode;},get LINE(){return LINE;},get SPD(){return SPD;},get CUM(){return CUM;},get TOTAL(){return TOTAL;},get ready(){return SURF.ready&&WGRID.size>0;}};   // test hook
 
 /* ---------- post: MSAA HDR target, subtle bloom, filmic output ---------- */
 const rt=new THREE.WebGLRenderTarget(2,2,{type:THREE.HalfFloatType,samples:mobile?0:4});
