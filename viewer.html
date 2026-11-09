@@ -74,6 +74,7 @@ button.on{background:var(--accent);border-color:var(--accent);color:#13151a}
   <div class="row">
     <button id="bTV">TV cams</button>
     <button id="bNight">Night</button>
+    <button id="bGhost" class="on" title="AI fastest lap: a ghost kart drives it alongside you once your lap starts">AI ghost</button>
   </div>
   <div class="row">
     <button id="bWheel" title="Calibrate a racing wheel (HORI, Logitech, Thrustmaster...)">Wheel setup</button>
@@ -1236,6 +1237,19 @@ const extKart=(()=>{ const g=new THREE.Group();
 document.getElementById('bTV').onclick=e=>{ tv=!tv; e.target.classList.toggle('on',tv);
   if(tv&&mode!=='lap'&&LINE.length){ lapS=CUM[spawnIdx]; lapT=0; lastLap=null; mode='lap'; mark('bLap'); } };
 document.getElementById('bGrip').onclick=e=>{ const on=GRIPU.uGripOn.value<0.5; GRIPU.uGripOn.value=on?1:0; e.target.classList.toggle('on',on); };
+/* ---------- AI ghost (lineopt.js): the fastest-lap AI's own lap, replayed from the timing line in step with your lap timer ---------- */
+const GHOST={on:true,pts:null,dt:0.05,lap:null,mesh:null};
+fetch('data/bestline.json').then(r=>r.ok?r.json():null).then(d=>{ if(!d||!d.ghost||!d.ghost.pts||!d.ghost.pts.length) return;
+  GHOST.pts=d.ghost.pts; GHOST.dt=d.ghost.dt||0.05; GHOST.lap=d.lapTime;
+  const g=extKart.clone(true); g.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); o.material.transparent=true; o.material.opacity=0.42; o.material.depthWrite=false;
+    o.material.color.lerp(new THREE.Color(0x9fe6ff),0.55); o.material.emissive=new THREE.Color(0x0a2a3a); o.castShadow=false; } });
+  g.visible=false; scene.add(g); GHOST.mesh=g; }).catch(()=>{});
+document.getElementById('bGhost').onclick=e=>{ GHOST.on=!GHOST.on; e.target.classList.toggle('on',GHOST.on); };
+function ghostUpdate(){ const G=GHOST; if(!G.mesh) return;
+  const show=G.on&&mode==='drive'&&DRV.lapOn&&G.pts; if(!show){ G.mesh.visible=false; return; }
+  const f=DRV.lapT/G.dt, i=Math.floor(f); if(i>=G.pts.length-1){ G.mesh.visible=false; return; }
+  const a=G.pts[i], b=G.pts[i+1], t=f-i, dh=Math.atan2(Math.sin(b[2]-a[2]),Math.cos(b[2]-a[2]));
+  G.mesh.position.set(a[0]+(b[0]-a[0])*t,0,a[1]+(b[1]-a[1])*t); G.mesh.rotation.set(0,a[2]+dh*t,0); G.mesh.visible=true; }
 let night=false; const DAY={env:null,fog:scene.fog.color.clone(),exp:renderer.toneMappingExposure};
 document.getElementById('bNight').onclick=e=>{
   night=!night; e.target.classList.toggle('on',night);
@@ -1317,7 +1331,7 @@ function surfAt(x,z){                               // 'asphalt' | 'grip' | 'ker
   return 'grass';
 }
 const SURFP={asphalt:{mu:1.01,crr:0.015},grip:{mu:1.05,crr:0.015},patch:{mu:1.18,crr:0.015},gravel:{mu:0.72,crr:0.06},kerb:{mu:0.93,crr:0.022},sand:{mu:0.62,crr:0.20},grass:{mu:0.58,crr:0.09},water:{mu:0.45,crr:0.45}};
-const KM={m:150,Iz:42,a:0.60,b:0.44,mu0:1.50,P:5600,Fdrive:620,CdA:0.55,hcg:0.22,B:26,C:1.25,fF:1.0,fR:1.0,axle:4};   // owner: understeer - neutral front/rear grip, sharper tyre (peak slip ~6.7 deg), lighter axle scrub (relieved further by inside-rear lift)
+const KM={m:155,Iz:42,a:0.60,b:0.44,mu0:1.95,P:10000,Fdrive:780,CdA:0.55,hcg:0.22,B:26,C:1.25,fF:1.0,fR:1.0,axle:4,vmax:27.8};   // owner: 'match or beat' the real T4 times - 225cc ~15 hp (~10 kW at the wheels), rev-limited ~100 km/h (55-65 mph), grip calibrated to the KartPlex T4 Senior lap (47.3 s, 2025 Cup R3)   // owner: understeer - neutral front/rear grip, sharper tyre (peak slip ~6.7 deg), lighter axle scrub (relieved further by inside-rear lift)
 function tyre(alpha,mu,N){ return mu*N*Math.sin(KM.C*Math.atan(KM.B*alpha)); }
 function nearestLine(x,z,guess){                    // local search along the racing line for progress / reset
   let bi=guess,bd=1e9,n=LINE.length; for(let k=-60;k<=60;k++){ const i=((guess+k)%n+n)%n, d=(LINE[i][0]-x)**2+(LINE[i][1]-z)**2; if(d<bd){bd=d;bi=i;} }
@@ -1483,7 +1497,7 @@ function physics(h){
   // inputs
   const dmax=0.34/(1+u*u/(PADC.wheel?1600:420)), delta=DRV.steer*dmax;     // owner: steering turned down (0.42 -> 0.34 rad max); wheel steers direct, pad keeps a light cap
   let Fx=0;
-  if(DRV.thr>0.02&&u>-0.5) Fx=DRV.thr*Math.min(KM.P/Math.max(u,2.5),KM.Fdrive);
+  if(DRV.thr>0.02&&u>-0.5) Fx=DRV.thr*Math.min(KM.P/Math.max(u,2.5),KM.Fdrive)*Math.min(1,Math.max(0,(KM.vmax-u)/0.6));   // rev limiter (T4: 55-65 mph)
   if(DRV.brk>0.02){ if(u>0.4) Fx-=DRV.brk*KM.m*g*1.2; else { DRV.rev+=h; if(DRV.rev>0.35&&u>-3) Fx-=DRV.brk*KM.m*g*0.15; } } else DRV.rev=0;
   // loads with longitudinal transfer, from the force the rear tyres can actually take
   let Nf=KM.m*g*KM.b/L, Nr=KM.m*g*KM.a/L, Fxr=Fx;
@@ -1552,7 +1566,7 @@ addEventListener('keydown',e=>{ if(mode!=='drive') return; if(['ArrowUp','ArrowD
   if(e.code==='KeyM') muted=!muted; });
 addEventListener('gamepadconnected',e=>flash((/dualsense|wireless controller|054c|playstation|ps5/i.test(e.gamepad.id)?'PS5 controller':'Controller')+' connected - press Drive kart, R2 gas / L2 brake'));
 addEventListener('gamepaddisconnected',()=>flash('Controller disconnected'));
-window.__t4drive={DRV,physics,lapLogic,surfAt,driveStart,get LINE(){return LINE;},get SPD(){return SPD;},get CUM(){return CUM;},get TOTAL(){return TOTAL;},get ready(){return SURF.ready&&WGRID.size>0;}};   // test hook
+window.__t4drive={DRV,physics,lapLogic,surfAt,driveStart,KM,SURFP,kerbH,PADC,GHOST,get mode(){return mode;},get LINE(){return LINE;},get SPD(){return SPD;},get CUM(){return CUM;},get TOTAL(){return TOTAL;},get ready(){return SURF.ready&&WGRID.size>0;}};   // test hook
 
 /* ---------- post: MSAA HDR target, subtle bloom, filmic output ---------- */
 const rt=new THREE.WebGLRenderTarget(2,2,{type:THREE.HalfFloatType,samples:mobile?0:4});
@@ -1630,7 +1644,7 @@ function loop(){
   if(mode!=='drive'){ engineSound(0,0); kerbSound(0,0); }
   const low=pos.y<2.5;
   const tvOn=tv&&mode==='lap'&&TVC.length>0, chaseOn=mode==='drive'&&DRV.chase;
-  kart.visible=showKart&&low&&!tvOn&&!chaseOn; extKart.visible=tvOn||chaseOn;
+  kart.visible=showKart&&low&&!tvOn&&!chaseOn; extKart.visible=tvOn||chaseOn; ghostUpdate();
   if(chaseOn){ DRV.camH=DRV.camH==null?DRV.h:DRV.camH; let dh=DRV.h-DRV.camH; dh=Math.atan2(Math.sin(dh),Math.cos(dh)); DRV.camH+=dh*Math.min(1,dt*5);
     const ca=DRV.camH+DRV.look; extKart.position.set(DRV.x,DRV.ky||0,DRV.z); extKart.rotation.set(-(DRV.kp||0),DRV.h,-(DRV.kr||0),'YXZ');
     cam.position.set(DRV.x-Math.sin(ca)*3.6,1.55,DRV.z-Math.cos(ca)*3.6); cam.lookAt(DRV.x+Math.sin(ca)*2.0,0.55,DRV.z+Math.cos(ca)*2.0); }
