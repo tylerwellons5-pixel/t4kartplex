@@ -1,0 +1,248 @@
+[
+ {
+  "name": "south shed",
+  "kind": "shed",
+  "c": [
+   96.3,
+   -17.3
+  ],
+  "len": 11.6,
+  "wid": 6.2,
+  "ang": 90,
+  "eave": 3.6,
+  "ridge": 4.3,
+  "roll": {
+   "N": 1
+  },
+  "door": "W"
+ },
+ {
+  "name": "west long shed",
+  "kind": "shed",
+  "c": [
+   -139.8,
+   -59.8
+  ],
+  "len": 35.0,
+  "wid": 7.4,
+  "ang": 90,
+  "eave": 3.4,
+  "ridge": 4.1,
+  "roll": {
+   "E": 4
+  },
+  "door": "E",
+  "win": {
+   "E": 0
+  }
+ },
+ {
+  "name": "west big building",
+  "kind": "shed",
+  "c": [
+   -131.6,
+   -86.0
+  ],
+  "len": 24.8,
+  "wid": 15.4,
+  "ang": 0,
+  "eave": 4.4,
+  "ridge": 5.4,
+  "roll": {
+   "N": 2
+  },
+  "door": "N",
+  "win": {
+   "E": 2
+  }
+ },
+ {
+  "name": "west office trailer",
+  "kind": "office",
+  "c": [
+   -141.3,
+   -26.6
+  ],
+  "len": 5.6,
+  "wid": 2.6,
+  "ang": 0,
+  "eave": 2.8,
+  "ridge": 3.0,
+  "door": "S",
+  "win": {
+   "S": 1,
+   "N": 1
+  }
+ },
+ {
+  "name": "west tents",
+  "kind": "tents",
+  "c": [
+   -111.0,
+   -89.3
+  ],
+  "len": 15.0,
+  "wid": 7.0,
+  "ang": 0,
+  "n": [
+   5,
+   2
+  ],
+  "colors": [
+   "#f1f1ee",
+   "#f1f1ee",
+   "#f1f1ee",
+   "#b07a76",
+   "#b07a76",
+   "#f1f1ee",
+   "#f1f1ee",
+   "#d8d6d0",
+   "#b07a76",
+   "#b07a76"
+  ]
+ },
+ {
+  "name": "west long tent",
+  "kind": "tents",
+  "c": [
+   -105.0,
+   -80.8
+  ],
+  "len": 18.0,
+  "wid": 3.0,
+  "ang": 0,
+  "n": [
+   6,
+   1
+  ]
+ },
+ {
+  "name": "east shed north",
+  "kind": "shed",
+  "c": [
+   161.9,
+   68.4
+  ],
+  "len": 31.6,
+  "wid": 11.2,
+  "ang": 0,
+  "eave": 4.6,
+  "ridge": 5.6,
+  "roll": {
+   "S": 3
+  },
+  "door": "S",
+  "win": {
+   "W": 1
+  }
+ },
+ {
+  "name": "east shed south",
+  "kind": "shed",
+  "c": [
+   160.8,
+   31.6
+  ],
+  "len": 37.4,
+  "wid": 19.0,
+  "ang": 0,
+  "eave": 5.0,
+  "ridge": 6.2,
+  "roll": {
+   "N": 4
+  },
+  "door": "W",
+  "win": {
+   "W": 2
+  }
+ },
+ {
+  "name": "east small building",
+  "kind": "office",
+  "c": [
+   164.0,
+   87.6
+  ],
+  "len": 10.2,
+  "wid": 4.4,
+  "ang": 0,
+  "eave": 3.0,
+  "ridge": 3.4,
+  "door": "S",
+  "win": {
+   "S": 2,
+   "N": 2
+  }
+ },
+ {
+  "name": "east house north",
+  "kind": "house",
+  "c": [
+   150.0,
+   183.0
+  ],
+  "len": 21.0,
+  "wid": 20.0,
+  "ang": 0,
+  "eave": 3.3,
+  "ridge": 6.6,
+  "door": "E",
+  "porch": [
+   9.0,
+   -10.0,
+   12.4,
+   10.0
+  ]
+ },
+ {
+  "name": "east house south",
+  "kind": "house",
+  "c": [
+   149.5,
+   141.0
+  ],
+  "len": 22.0,
+  "wid": 21.0,
+  "ang": 0,
+  "eave": 3.3,
+  "ridge": 6.6,
+  "door": "E",
+  "porch": [
+   9.6,
+   -10.5,
+   13.0,
+   10.5
+  ]
+ },
+ {
+  "name": "north lot shed",
+  "kind": "shed",
+  "c": [
+   117.3,
+   136.8
+  ],
+  "len": 21.2,
+  "wid": 16.8,
+  "ang": 0,
+  "eave": 4.8,
+  "ridge": 6.0,
+  "roll": {
+   "W": 2,
+   "S": 2
+  },
+  "door": "W"
+ },
+ {
+  "name": "comms tower",
+  "kind": "lattice",
+  "c": [
+   154.5,
+   -6.0
+  ],
+  "len": 3.4,
+  "wid": 3.4,
+  "ang": 0,
+  "h": 38,
+  "base": 3.4
+ }
+]

@@ -1,0 +1,67 @@
+[
+ {
+  "name": "garages_w",
+  "kind": "garages",
+  "height": 3.8,
+  "rect": [
+   -51.0,
+   -8.3,
+   5.0,
+   -0.3
+  ],
+  "front": "OOROOORO",
+  "mural": true
+ },
+ {
+  "name": "commentator_box",
+  "kind": "tower",
+  "height": 6.4,
+  "apex": 8.3,
+  "rect": [
+   5.0,
+   -8.4,
+   13.75,
+   -0.3
+  ],
+  "pass": [
+   7.0,
+   11.8
+  ],
+  "pass_h": 3.4,
+  "upper_front": -1.5
+ },
+ {
+  "name": "garages_e",
+  "kind": "garages",
+  "height": 3.8,
+  "rect": [
+   13.75,
+   -8.3,
+   69.3,
+   -0.3
+  ],
+  "front": "OROOROOR"
+ },
+ {
+  "name": "tall_canopy",
+  "kind": "canopy_tall",
+  "height": 6.4,
+  "rect": [
+   48.7,
+   -0.3,
+   69.6,
+   10.1
+  ]
+ },
+ {
+  "name": "seating_deck",
+  "kind": "deck",
+  "height": 0.15,
+  "rect": [
+   49.2,
+   7.75,
+   68.4,
+   10.0
+  ]
+ }
+]
