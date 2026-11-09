@@ -1152,28 +1152,201 @@ fetch('data/paint.json').then(r=>r.json()).then(P=>{
   m.receiveShadow=true; scene.add(m);
 }).catch(()=>{});
 
-/* ---------- kart cockpit attached to the camera ---------- */
-const kart=new THREE.Group(); cam.add(kart);
-{ const dark=new THREE.MeshStandardMaterial({color:0x232528,roughness:0.5,metalness:0.4});
-  const grip=new THREE.MeshStandardMaterial({color:0xe2632a,roughness:0.7});
-  const body=new THREE.MeshStandardMaterial({color:0x1e63c8,roughness:0.35,metalness:0.1,envMapIntensity:0.8});
-  const rubber=new THREE.MeshStandardMaterial({color:0x151617,roughness:0.85});
-  const wheel=new THREE.Group();
-  const rim=new THREE.Mesh(new THREE.TorusGeometry(0.15,0.017,12,40),dark); wheel.add(rim);
-  for(const a of [0.55,Math.PI-0.55]){ const gr=new THREE.Mesh(new THREE.TorusGeometry(0.15,0.024,12,14,0.9),grip); gr.rotation.z=a-0.45; wheel.add(gr); }
-  for(const a of [Math.PI/2+0.9,Math.PI/2-0.9,-Math.PI/2]){ const sp=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.022,0.012),dark);
-    sp.position.set(Math.cos(a)*0.075,Math.sin(a)*0.075,0); sp.rotation.z=a; wheel.add(sp); }
-  const lcd=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.06,0.02),new THREE.MeshStandardMaterial({color:0x0c1115,roughness:0.2,metalness:0.3,emissive:0x173a2a,emissiveIntensity:0.6}));
-  lcd.position.set(0,0.035,0.01); wheel.add(lcd);
-  wheel.position.set(0,-0.3,-0.46); wheel.rotation.x=-1.05; kart.add(wheel); kart.userData.wheel=wheel;
-  const col=new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.45,8),dark); col.position.set(0,-0.43,-0.62); col.rotation.x=1.25; kart.add(col);
-  const nose=new THREE.Shape([[-0.36,0],[0.36,0],[0.26,0.1],[-0.26,0.1]].map(p=>new THREE.Vector2(p[0],p[1])));
-  const ng=new THREE.ExtrudeGeometry(nose,{depth:0.55,bevelEnabled:true,bevelThickness:0.02,bevelSize:0.02,bevelSegments:2});
-  const nm=new THREE.Mesh(ng,body); nm.position.set(0,-0.66,-1.42); kart.add(nm);
-  for(const sx of [-1,1]){ const t=new THREE.Mesh(new THREE.CylinderGeometry(0.135,0.135,0.12,24),rubber); t.rotation.z=Math.PI/2;
-    t.position.set(sx*0.47,-0.62,-0.98); kart.add(t);
-    const pod=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.07,0.5),body); pod.position.set(sx*0.32,-0.62,-0.62); kart.add(pod); }
+/* ---------- the T4 Jr, built like a real kart (owner: 'build a kart from the ground up like building a real kart, all the framing').
+   Parts from the T4 Series Junior regulations / Tillotson parts list, layout from the overhead pit shots in the onboard video:
+   frame  T-CHS-CS1, 30 mm tubes in Tillotson Blue, 1,040 mm wheelbase: two main rails, front cross, three cross members, diagonal,
+          kingpin C-brackets, steering-column support, seat mounts, rear bearing-carrier mounts; chrome nerf bars and front bumper
+   front  25 mm spindles (10 deg), 270 mm tie rods, steering plate, slanted hub, Tillotson Diesis wheel (white padded top, red marks)
+          with the lap timer in the middle; pedals, 19 mm brake master cylinder, white 8 L tank between the legs, black floor tray
+   rear   50 x 1,030 mm axle in three bearing carriers, 95 mm hubs, black rear disc + caliper (left), 71T sprocket + chain (right)
+   engine TPP-225RS-02 on the RIGHT (crankcase, finned barrel, valve cover, recoil housing, Stinger clutch + guard, FM19 carb,
+          black airbox along the rear bumper, silencer)
+   body   KG 506 nose (black wings), KG 507 side pods, front number panel, black plastic rear bumper, Silver Line seat (silver weave)
+   wheels Maxxis T4 slicks 10x4.50-5 / 11x7.10-5. Number 13, yellow Junior plates.   Axes: x right, y up, z forward. */
+const KTEX={};
+function kartTextures(){
+  if(KTEX.plate) return KTEX;
+  const plate=(w,h)=>canvasTex(w,h,(x,W,H)=>{ x.fillStyle='#f4d21c'; x.fillRect(0,0,W,H); x.fillStyle='#0d0d0d'; x.font='900 '+Math.round(H*0.78)+'px Archivo, Arial, sans-serif';
+    x.textAlign='center'; x.textBaseline='middle'; x.fillText('13',W/2,H*0.54); });
+  KTEX.plate=plate(256,192); KTEX.plateWide=plate(384,160);
+  const LB='#2b9fe0', DB='#123f8f', OR='#f2701d', WH='#f5f6f4';
+  KTEX.pod=canvasTex(512,128,(x,W,H)=>{ x.fillStyle=LB; x.fillRect(0,0,W,H);                              // KG 506 side pod sticker (T4 kit): light blue, white window, orange chevrons, dark-blue base
+    x.fillStyle=WH; x.beginPath(); x.moveTo(W*0.18,H*0.22); x.lineTo(W*0.82,H*0.30); x.lineTo(W*0.74,H*0.78); x.lineTo(W*0.26,H*0.72); x.closePath(); x.fill();
+    x.strokeStyle=OR; x.lineWidth=7; x.beginPath(); x.moveTo(W*0.20,H*0.76); x.lineTo(W*0.30,H*0.48); x.lineTo(W*0.20,H*0.24); x.stroke();
+    x.beginPath(); x.moveTo(W*0.86,H*0.30); x.lineTo(W*0.94,H*0.52); x.lineTo(W*0.86,H*0.74); x.stroke();
+    x.fillStyle=DB; x.fillRect(0,H*0.84,W,H*0.16); x.beginPath(); x.moveTo(0,H*0.84); x.lineTo(W*0.12,H*0.6); x.lineTo(W*0.12,H*0.84); x.fill();
+    x.fillStyle='#f4d21c'; x.fillRect(W*0.40,H*0.36,W*0.20,H*0.30); x.fillStyle='#0d0d0d'; x.font='900 40px Archivo, Arial, sans-serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('13',W*0.5,H*0.52); });
+  KTEX.nose=canvasTex(256,128,(x,W,H)=>{ x.fillStyle=LB; x.fillRect(0,0,W,H);                              // KG 506 front spoiler sticker
+    x.fillStyle=WH; x.beginPath(); x.moveTo(W*0.30,0); x.lineTo(W*0.70,0); x.lineTo(W*0.62,H*0.62); x.lineTo(W*0.38,H*0.62); x.fill();
+    x.fillStyle=OR; x.fillRect(W*0.44,H*0.68,W*0.12,H*0.10); x.strokeStyle=OR; x.lineWidth=4; x.beginPath(); x.moveTo(W*0.08,H*0.2); x.lineTo(W*0.22,H*0.7); x.moveTo(W*0.92,H*0.2); x.lineTo(W*0.78,H*0.7); x.stroke();
+    x.fillStyle=DB; x.fillRect(0,H*0.84,W,H*0.16); x.fillStyle=DB; x.font='900 30px Archivo, Arial, sans-serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('T4',W/2,H*0.32); });
+  KTEX.panel=canvasTex(256,256,(x,W,H)=>{ x.fillStyle=LB; x.fillRect(0,0,W,H);                             // Nassau panel sticker: light blue, dark-blue edges, white lower part, T4 SERIES
+    x.fillStyle=DB; x.fillRect(0,0,W*0.12,H); x.fillRect(W*0.88,0,W*0.12,H); x.fillStyle=WH; x.beginPath(); x.moveTo(W*0.12,H*0.62); x.lineTo(W*0.88,H*0.50); x.lineTo(W*0.88,H); x.lineTo(W*0.12,H); x.fill();
+    x.strokeStyle=OR; x.lineWidth=6; x.beginPath(); x.moveTo(W*0.16,H*0.58); x.lineTo(W*0.84,H*0.46); x.stroke();
+    x.fillStyle=WH; x.font='900 54px Archivo, Arial, sans-serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('T4',W/2,H*0.30);
+    x.fillStyle=DB; x.font='800 22px Archivo, Arial, sans-serif'; x.fillText('SERIES',W/2,H*0.80); });
+  KTEX.panel.wrapS=KTEX.panel.wrapT=THREE.ClampToEdgeWrapping; KTEX.panel.repeat.set(1/0.42,1/0.34); KTEX.panel.offset.set(0.5,0);
+  KTEX.weave=canvasTex(128,128,(x,W,H)=>{ x.fillStyle='#b9bec4'; x.fillRect(0,0,W,H);                       // Silver Line seat: woven glass / silver finish
+    for(let i=0;i<W;i+=8) for(let j=0;j<H;j+=8){ x.fillStyle=((i+j)/8)%2?'#d4d8dc':'#9fa5ab'; x.fillRect(i,j,8,4); x.fillStyle=((i+j)/8)%2?'#a7adb3':'#cdd1d5'; x.fillRect(i,j+4,8,4); } });
+  KTEX.weave.wrapS=KTEX.weave.wrapT=THREE.RepeatWrapping; KTEX.weave.repeat.set(3,3);
+  return KTEX;
 }
+/* lap timer on the wheel (owner: 'add a kart timer with all features'): RPM shift lights, RPM, speed, running lap time, lap number,
+   last / best lap, live delta to your best lap, engine (cylinder-head) temperature, battery. One shared screen, redrawn 10x a second. */
+const TIMER={c:null,tex:null,t:0,cht:120};
+function timerTex(){ if(TIMER.tex) return TIMER.tex; const c=document.createElement('canvas'); c.width=512; c.height=288; TIMER.c=c;
+  TIMER.tex=new THREE.CanvasTexture(c); TIMER.tex.colorSpace=THREE.SRGBColorSpace; TIMER.tex.anisotropy=4; const x=c.getContext('2d'); x.fillStyle='#05080a'; x.fillRect(0,0,512,288); return TIMER.tex; }   // drawn once driving starts
+function timerDraw(dt,rpm,force){
+  TIMER.t+=dt; if(!force&&TIMER.t<0.1) return; TIMER.t=0; const x=TIMER.c.getContext('2d'), W=512, H=288;
+  x.fillStyle='#05080a'; x.fillRect(0,0,W,H);
+  x.fillStyle='#7f8a94'; x.font='600 16px Archivo, Arial, sans-serif'; x.textAlign='center'; x.fillText('T4 JR  #13',W/2,24);   // shift lights are the real LEDs above the screen
+  const lab=(t,px,py)=>{ x.fillStyle='#7f8a94'; x.font='600 18px Archivo, Arial, sans-serif'; x.textAlign='left'; x.fillText(t,px,py); };
+  const val=(t,px,py,sz,col,al)=>{ x.fillStyle=col||'#f2f5f7'; x.font='800 '+sz+'px "DM Mono", monospace'; x.textAlign=al||'left'; x.fillText(t,px,py); };
+  const sp=Math.hypot(DRV.vx||0,DRV.vz||0)*3.6, lt=DRV.lapOn?fmtT(DRV.lapT):'--:--.---';
+  lab('RPM',16,66); val(String(Math.round(rpm/10)*10),14,112,44);
+  lab('LAP '+(DRV.lapN||0),200,66); val(lt.replace(/^0:/,''),190,116,50,DRV.lapOn&&!DRV.valid?'#ff8a3d':'#f2f5f7');
+  lab('KM/H',420,66); val(String(Math.round(sp)),496,112,44,null,'right');
+  x.strokeStyle='#1f2a31'; x.lineWidth=2; x.beginPath(); x.moveTo(10,134); x.lineTo(W-10,134); x.stroke();
+  lab('BEST',16,164); val(DRV.best?fmtT(DRV.best).replace(/^0:/,''):'--.---',14,204,32);
+  lab('LAST',16,236); val(DRV.last?fmtT(DRV.last).replace(/^0:/,''):'--.---',14,276,32);
+  const d=DRV.delta; lab('DELTA',200,164); val(d==null?'--.--':(d>0?'+':'')+d.toFixed(2),196,214,48,d==null?'#f2f5f7':d>0?'#ff4d42':'#2bd36b');
+  lab('CHT',380,164); val(Math.round(TIMER.cht)+'°',496,204,32,TIMER.cht>205?'#ff8a3d':null,'right');
+  lab('BATT',380,236); x.strokeStyle='#7f8a94'; x.strokeRect(430,248,56,24); x.fillStyle='#2bd36b'; x.fillRect(433,251,44,18); x.fillRect(486,255,4,10);
+  TIMER.tex.needsUpdate=true;
+}
+function buildT4Kart(opt={}){
+  const T=kartTextures(), g=new THREE.Group(), stat=new THREE.Group(); g.add(stat);
+  const M=(c,r,m,e,extra)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:r,metalness:m||0,envMapIntensity:e??0.7},extra||{}));
+  const C={frame:M(0x2a9ad8,0.28,0.45,0.9), chrome:M(0xdfe3e7,0.14,1.0,1.0), black:M(0x151618,0.6,0.05), plastic:M(0x1d1e20,0.72,0), tyre:M(0x161616,0.9,0,0.25),
+    rim:M(0x8d949b,0.32,0.9), alu:M(0xa9b0b7,0.3,0.9), dark:M(0x2a2c2f,0.45,0.6), eng:M(0x6e7378,0.4,0.7), fins:M(0x9aa1a8,0.35,0.85), orange:M(0xe0701e,0.4,0.5),
+    tank:M(0xece8dc,0.4,0,0.5,{transparent:true,opacity:0.88}), white:M(0xf4f5f3,0.42,0.02), blue:M(0x1d9ad6,0.36,0.05), navy:M(0x123c78,0.4,0.05),
+    grip:M(0xf1f1ee,0.8,0), tape:M(0xd8332a,0.6,0), seat:M(0xc6cbd0,0.32,0.75,0.8,{map:T.weave}), red:M(0xc8232c,0.5,0),
+    pod:M(0xffffff,0.4,0.02,0.7,{map:T.pod}), nose:M(0xffffff,0.4,0.02,0.7,{map:T.nose}), plate:M(0xffffff,0.45,0,0.6,{map:T.plate}), plateW:M(0xffffff,0.45,0,0.6,{map:T.plateWide,side:THREE.DoubleSide}),
+    chain:M(0xc9a13a,0.35,0.9), gold:M(0xd6ab3c,0.28,0.95), rimB:M(0x1b1c1e,0.35,0.6), guard:M(0x8a8f94,0.5,0.1), panel:M(0xffffff,0.4,0.02,0.7,{map:T.panel}),
+    led:null, disc:M(0x27292c,0.35,0.7), screen:new THREE.MeshBasicMaterial({map:timerTex(),toneMapped:false})};
+  const V=(a)=>new THREE.Vector3(a[0],a[1],a[2]);
+  const put=(geo,mat,p,r,parent)=>{ const m=new THREE.Mesh(geo,mat); if(p) m.position.set(p[0],p[1],p[2]); if(r) m.rotation.set(r[0],r[1],r[2],r[3]||'XYZ'); (parent||stat).add(m); return m; };
+  const tube=(pts,r,mat,parent)=>{ if(pts.length===2){ const A=V(pts[0]),B=V(pts[1]),d=B.clone().sub(A),L=d.length(); const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,L,12,1),mat);
+      m.position.copy(A).add(B).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); (parent||stat).add(m); return m; }
+    const cv=new THREE.CatmullRomCurve3(pts.map(V),false,'centripetal'); return put(new THREE.TubeGeometry(cv,pts.length*10,r,12,false),mat,null,null,parent); };
+  const box=(w,h,d,mat,p,r,rad,parent)=>put(rad?new RoundedBoxGeometry(w,h,d,3,rad):new THREE.BoxGeometry(w,h,d),mat,p,r,parent);
+  const cyl=(rt,rb,h,mat,p,r,seg,parent)=>put(new THREE.CylinderGeometry(rt,rb,h,seg||20),mat,p,r,parent);
+  const mir=f=>{ f(1); f(-1); };
+  const RF=0.015, Y=0.045;                                                      // 30 mm tubes, ~30 mm ground clearance
+  // ---- frame: main rails (bent in at the front), crosses, diagonal
+  mir(s=>tube([[s*0.20,Y+0.012,0.80],[s*0.245,Y,0.66],[s*0.30,Y,0.42],[s*0.365,Y,0.12],[s*0.395,Y,-0.20],[s*0.39,Y+0.004,-0.50],[s*0.33,Y+0.01,-0.70]],RF,C.frame));
+  tube([[-0.20,Y+0.012,0.80],[-0.1,Y+0.02,0.83],[0.1,Y+0.02,0.83],[0.20,Y+0.012,0.80]],RF,C.frame);
+  tube([[-0.30,Y,0.42],[0.30,Y,0.42]],RF,C.frame); tube([[-0.385,Y,-0.06],[0.385,Y,-0.06]],RF,C.frame); tube([[-0.393,Y,-0.36],[0.393,Y,-0.36]],RF,C.frame);
+  tube([[-0.36,Y+0.006,-0.62],[0.36,Y+0.006,-0.62]],RF,C.frame); tube([[-0.30,Y,0.42],[0.385,Y,-0.06]],0.013,C.frame);
+  // kingpin C-brackets + spindles, stub axles, front hubs
+  mir(s=>{ tube([[s*0.25,Y,0.60],[s*0.30,Y+0.02,0.55]],RF,C.frame); box(0.07,0.012,0.07,C.frame,[s*0.31,0.065,0.53]); box(0.07,0.012,0.07,C.frame,[s*0.31,0.175,0.51]);
+    tube([[s*0.29,Y+0.01,0.56],[s*0.30,0.18,0.52]],0.012,C.frame);                                   // upright of the C
+    cyl(0.009,0.009,0.14,C.chrome,[s*0.315,0.12,0.52],[-0.17,0,s*0.12]);                               // kingpin (caster + camber)
+    box(0.04,0.09,0.05,C.chrome,[s*0.335,0.12,0.52],null,0.008);                                      // spindle body
+    cyl(0.0125,0.0125,0.20,C.chrome,[s*0.44,0.127,0.52],[0,0,Math.PI/2]);                             // 25 mm stub axle
+    tube([[s*0.33,0.10,0.51],[s*0.27,0.10,0.44]],0.008,C.chrome);                                     // steering arm
+    cyl(0.03,0.03,0.09,C.alu,[s*0.505,0.127,0.52],[0,0,Math.PI/2]); });                               // front hub
+  // steering: plate, tie rods, column, support, slanted hub
+  box(0.10,0.008,0.05,C.chrome,[0,0.085,0.60]); mir(s=>tube([[s*0.045,0.088,0.60],[s*0.27,0.10,0.44]],0.006,C.chrome));
+  tube([[0,0.07,0.64],[0,0.47,0.22]],0.0115,C.chrome); cyl(0.016,0.016,0.03,C.red,[0,0.11,0.60],[1.0,0,0]); cyl(0.024,0.03,0.05,C.gold,[0,0.46,0.225],[0.85,0,0]); mir(s=>tube([[s*0.20,Y+0.01,0.70],[s*0.12,0.29,0.57]],0.009,C.frame));   // panel brackets
+  mir(s=>tube([[s*0.14,Y,0.42],[s*0.05,0.33,0.33],[0,0.37,0.31]],0.011,C.frame));
+  // pedals, brake master cylinder + line, floor tray, fuel tank
+  mir(s=>{ tube([[s*0.09,Y+0.01,0.72],[s*0.09,0.15,0.66]],0.007,C.chrome); box(0.07,0.09,0.012,C.alu,[s*0.09,0.16,0.665],[-0.35,0,0]); });
+  tube([[-0.09,0.10,0.68],[-0.12,0.075,0.30],[-0.15,0.08,-0.30]],0.004,C.chrome); tube([[-0.085,0.11,0.68],[-0.115,0.085,0.30],[-0.145,0.09,-0.30]],0.002,C.alu);   // brake tie rod + safety cable
+  box(0.04,0.05,0.10,C.frame,[-0.16,0.10,-0.36],null,0.01); tube([[-0.16,0.12,-0.40],[-0.18,0.20,-0.48]],0.003,C.black);   // 19 mm pump on its bracket, line to the caliper
+  { const sh=new THREE.Shape([[-0.205,0.79],[0.205,0.79],[0.30,0.42],[0.33,0.10],[-0.33,0.10],[-0.30,0.42]].map(p=>new THREE.Vector2(p[0],p[1])));
+    const fg=new THREE.ExtrudeGeometry(sh,{depth:0.006,bevelEnabled:false}); fg.rotateX(Math.PI/2); fg.translate(0,0.034,0); put(fg,C.plastic); }
+  box(0.17,0.13,0.24,C.tank,[0.0,0.115,0.30],null,0.035); cyl(0.022,0.022,0.03,C.black,[0,0.195,0.36]);
+  // seat: Silver Line bucket on its mounts, one stay to the left rail
+  { const S=new THREE.Group(); S.position.set(-0.02,0.075,-0.28); stat.add(S);
+    box(0.36,0.035,0.34,C.seat,[0,0,0.02],[-0.05,0,0],0.015,S); box(0.39,0.48,0.035,C.seat,[0,0.25,-0.18],[-0.36,0,0],0.015,S);
+    mir(s=>{ box(0.035,0.26,0.36,C.seat,[s*0.19,0.13,-0.02],[-0.12,0,s*0.12],0.012,S); box(0.035,0.30,0.06,C.seat,[s*0.205,0.36,-0.25],[-0.36,0,s*0.18],0.012,S); });
+    mir(s=>tube([[s*0.14,-0.03,0.10],[s*0.14,-0.03,0.12]],0.01,C.chrome,S)); }
+  tube([[-0.22,0.38,-0.47],[-0.38,Y+0.01,-0.36]],0.01,C.frame); mir(s=>tube([[s*0.12,Y,-0.36],[s*0.12,0.07,-0.36]],0.009,C.chrome));
+  // rear axle, bearing carriers, hubs, brake disc + caliper (left), sprocket + chain (right)
+  cyl(0.025,0.025,1.03,C.alu,[0,0.14,-0.52],[0,0,Math.PI/2]);
+  for(const bx of [-0.39,0.06,0.39]){ box(0.014,0.13,0.11,C.dark,[bx,0.11,-0.52],null,0.01); cyl(0.04,0.04,0.024,C.dark,[bx,0.14,-0.52],[0,0,Math.PI/2]); }
+  mir(s=>cyl(0.035,0.035,0.095,C.alu,[s*0.47,0.14,-0.52],[0,0,Math.PI/2]));
+  cyl(0.10,0.10,0.009,C.disc,[-0.18,0.14,-0.52],[0,0,Math.PI/2],28); box(0.03,0.07,0.08,C.red,[-0.18,0.215,-0.50],null,0.008); box(0.02,0.13,0.03,C.dark,[-0.18,0.14,-0.62]);
+  cyl(0.115,0.115,0.006,C.gold,[0.22,0.14,-0.52],[0,0,Math.PI/2],40); cyl(0.05,0.05,0.02,C.alu,[0.22,0.14,-0.52],[0,0,Math.PI/2]);
+  // ---- TPP-225RS-02 engine on the right side: mount plate, crankcase, finned barrel tilted back, head, valve cover, recoil, clutch, carb, airbox, silencer
+  box(0.16,0.012,0.26,C.dark,[0.40,0.06,-0.25]);
+  const E=new THREE.Group(); E.position.set(0.42,0.07,-0.26); stat.add(E);
+  box(0.20,0.17,0.19,C.eng,[0,0.10,0],null,0.03,E);
+  for(let k=0;k<7;k++) box(0.17,0.008,0.15,C.fins,[0,0.20+k*0.016,-0.03],[0.35,0,0],0.003,E);
+  box(0.15,0.07,0.13,C.black,[0,0.325,-0.075],[0.35,0,0],0.02,E);
+  cyl(0.085,0.085,0.05,C.black,[0.12,0.11,0],[0,0,Math.PI/2],24,E); cyl(0.03,0.03,0.03,C.red,[0.15,0.11,0],[0,0,Math.PI/2],12,E);
+  cyl(0.055,0.055,0.04,C.dark,[-0.12,0.10,0.02],[0,0,Math.PI/2],20,E); box(0.06,0.14,0.13,C.black,[-0.15,0.10,0.0],null,0.02,E);   // Stinger clutch + guard
+  box(0.05,0.05,0.07,C.orange,[0,0.21,-0.17],null,0.01,E); cyl(0.022,0.022,0.12,C.dark,[0,0.21,-0.25],[Math.PI/2,0,0],12,E);
+  tube([[0.42,0.28,-0.51],[0.40,0.27,-0.66],[0.30,0.27,-0.74],[0.10,0.27,-0.76]],0.03,C.black);                     // airbox snorkel along the rear bumper
+  cyl(0.06,0.06,0.15,C.black,[0.05,0.27,-0.76],[0,0,Math.PI/2]);
+  tube([[0.48,0.30,-0.30],[0.56,0.24,-0.40],[0.58,0.21,-0.55]],0.016,C.chrome); cyl(0.045,0.045,0.24,C.alu,[0.58,0.21,-0.66],[Math.PI/2,0,0]);   // header + silencer
+  // chain run (top + bottom strands) from the clutch to the 71T sprocket
+  tube([[0.27,0.235,-0.26],[0.22,0.255,-0.52]],0.004,C.chain); tube([[0.27,0.125,-0.26],[0.22,0.025,-0.52]],0.004,C.chain);
+  box(0.03,0.16,0.34,C.guard,[0.25,0.15,-0.40],null,0.02); cyl(0.025,0.025,0.09,C.red,[0.33,0.11,-0.02]);              // teflon chain guard; recovery tank
+  // ---- chrome nerf bars (side bumpers) and front bumper
+  mir(s=>{ tube([[s*0.33,Y+0.005,0.30],[s*0.55,0.10,0.26],[s*0.625,0.105,0.18],[s*0.625,0.105,-0.22],[s*0.55,0.10,-0.30],[s*0.39,Y+0.005,-0.34]],0.012,C.chrome);
+    tube([[s*0.625,0.105,0.12],[s*0.625,0.175,0.10],[s*0.625,0.175,-0.18],[s*0.625,0.105,-0.20]],0.011,C.chrome); });
+  tube([[-0.21,Y+0.01,0.80],[-0.25,0.07,0.90],[0,0.07,0.95],[0.25,0.07,0.90],[0.21,Y+0.01,0.80]],0.012,C.chrome);
+  mir(s=>tube([[s*0.15,Y+0.02,0.83],[s*0.20,0.16,0.88]],0.011,C.chrome)); tube([[-0.20,0.16,0.88],[0.20,0.16,0.88]],0.011,C.chrome);
+  // ---- KG 506 nose: white/blue top, black wings
+  { const sh=new THREE.Shape(); sh.moveTo(-0.50,0.78); sh.lineTo(-0.47,0.97); sh.quadraticCurveTo(0,1.06,0.47,0.97); sh.lineTo(0.50,0.78); sh.quadraticCurveTo(0,0.74,-0.50,0.78);
+    const ng=new THREE.ExtrudeGeometry(sh,{depth:0.12,bevelEnabled:true,bevelThickness:0.03,bevelSize:0.02,bevelSegments:3}); ng.rotateX(Math.PI/2); ng.translate(0,0.22,0);   // shape y -> kart z (front)
+    const uv=ng.attributes.uv, p=ng.attributes.position; for(let i=0;i<p.count;i++) uv.setXY(i,(p.getX(i)+0.5)/1.0,(p.getZ(i)-0.74)/0.32);
+    put(ng,C.nose); mir(s=>box(0.16,0.10,0.22,C.plastic,[s*0.44,0.12,0.86],[0,s*0.15,0],0.03)); }
+  // front number panel on the column support: blue, yellow 13 plate facing forward and one on the top lip facing the driver
+  { const sh=new THREE.Shape(); sh.moveTo(-0.21,0); sh.lineTo(0.21,0); sh.quadraticCurveTo(0.19,0.18,0.15,0.31); sh.quadraticCurveTo(0,0.35,-0.15,0.31); sh.quadraticCurveTo(-0.19,0.18,-0.21,0);
+    const pg=new THREE.ExtrudeGeometry(sh,{depth:0.014,bevelEnabled:true,bevelThickness:0.004,bevelSize:0.004,bevelSegments:1});
+    const P=put(pg,C.panel,[0,0.27,0.56],[-0.30,0,0]);
+    put(new THREE.PlaneGeometry(0.22,0.15),C.plate,[0,0.135,0.0225],null,P);
+    const lip=put(new THREE.PlaneGeometry(0.24,0.09),C.plateW,[0,0.335,-0.02],[0,Math.PI,0],P); lip.rotation.set(1.0,Math.PI,0); }   // the 13 you see over the wheel (onboard footage)
+  // KG 507 side pods on the nerf bars
+  mir(s=>{ const pg=new RoundedBoxGeometry(0.19,0.15,0.64,3,0.045); const pd=put(pg,C.pod,[s*0.63,0.185,-0.03]);
+    const uv=pg.attributes.uv, p=pg.attributes.position; for(let i=0;i<p.count;i++) uv.setXY(i,(p.getZ(i)*s+0.32)/0.64,(p.getY(i)+0.075)/0.15); });
+  // black plastic rear bumper with the 13
+  { const sh=new THREE.Shape(); sh.moveTo(-0.80,-0.62); sh.lineTo(-0.80,-0.86); sh.quadraticCurveTo(0,-0.97,0.80,-0.86); sh.lineTo(0.80,-0.62); sh.lineTo(0.72,-0.62); sh.lineTo(0.72,-0.80); sh.quadraticCurveTo(0,-0.89,-0.72,-0.80); sh.lineTo(-0.72,-0.62);
+    const bg=new THREE.ExtrudeGeometry(sh,{depth:0.16,bevelEnabled:true,bevelThickness:0.02,bevelSize:0.015,bevelSegments:2}); bg.rotateX(Math.PI/2); bg.translate(0,0.26,0); put(bg,C.plastic);   // shape y -> kart z (rear)
+    put(new THREE.PlaneGeometry(0.22,0.10),C.plateW,[-0.42,0.17,-0.905],[0,Math.PI,0]); mir(s=>tube([[s*0.33,Y+0.01,-0.70],[s*0.40,0.14,-0.84]],0.012,C.frame)); }
+  // ---- wheels: Maxxis T4 slicks on T4 rims
+  const wheel=(x,z,r,w,rm)=>{ cyl(r,r,w,C.tyre,[x,r,z],[0,0,Math.PI/2],32); cyl(r*1.004,r*1.004,w*0.82,C.tyre,[x,r,z],[0,0,Math.PI/2],32);
+    cyl(r*0.52,r*0.52,w+0.006,rm||C.rim,[x,r,z],[0,0,Math.PI/2],24); cyl(r*0.2,r*0.2,w+0.03,C.alu,[x,r,z],[0,0,Math.PI/2],12); };
+  mir(s=>{ wheel(s*0.555,0.52,0.127,0.115); wheel(s*0.61,-0.52,0.140,0.18,C.rimB); });
+  // ---- Tillotson Diesis steering wheel on the slanted hub, lap timer in the middle
+  const wg=new THREE.Group(); wg.position.set(0,0.49,0.20); wg.rotation.x=0.72; g.add(wg);
+  const sw=new THREE.Group(); wg.add(sw); g.userData.wheel=sw;
+  { const R=0.158; sw.add(new THREE.Mesh(new THREE.TorusGeometry(R,0.011,10,64),C.black));
+    const pad=new THREE.Mesh(new THREE.TorusGeometry(R,0.021,12,40,2.35),C.grip); pad.rotation.z=Math.PI/2-1.175; sw.add(pad);          // white padding across the top
+    for(const a0 of [Math.PI/2+0.62,Math.PI/2-0.62-0.2]){ const tp=new THREE.Mesh(new THREE.TorusGeometry(R,0.0225,12,8,0.2),C.tape); tp.rotation.z=a0; sw.add(tp); }
+    const pl=new THREE.Shape(); pl.absarc(0,0,0.055,0,Math.PI*2,false);
+    const spoke=(a,len,w)=>{ const sp=new THREE.Mesh(new RoundedBoxGeometry(len,w,0.006,2,0.003),C.black); sp.position.set(Math.cos(a)*len/2,Math.sin(a)*len/2,0); sp.rotation.z=a; sw.add(sp);
+      for(const k of [0.35,0.6,0.82]){ const h=new THREE.Mesh(new THREE.CylinderGeometry(0.0065,0.0065,0.008,10),C.alu); h.rotation.x=Math.PI/2; h.position.set(Math.cos(a)*len*k,Math.sin(a)*len*k,0.002); sw.add(h); } };
+    spoke(-0.35,R,0.05); spoke(Math.PI+0.35,R,0.05); spoke(-Math.PI/2,R,0.06);
+    const hub=new THREE.Mesh(new RoundedBoxGeometry(0.12,0.10,0.014,2,0.01),C.black); hub.position.set(0,-0.01,0); sw.add(hub);
+    const logo=new THREE.Mesh(new THREE.PlaneGeometry(0.022,0.022),C.red); logo.position.set(0,-0.042,-0.009); logo.rotation.y=Math.PI; sw.add(logo);
+    const unit=new THREE.Mesh(new RoundedBoxGeometry(0.135,0.082,0.026,2,0.008),C.dark); unit.position.set(0,0.035,-0.016); sw.add(unit);
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(0.112,0.063),C.screen); scr.position.set(0,0.035,-0.0295); scr.rotation.y=Math.PI; sw.add(scr); g.userData.screen=scr;
+    const bar=new THREE.Mesh(new RoundedBoxGeometry(0.14,0.018,0.03,2,0.006),C.dark); bar.position.set(0,0.085,-0.016); sw.add(bar);                // LED bar on top of the timer
+    const leds=[]; for(let i=0;i<10;i++){ const m=new THREE.Mesh(new THREE.SphereGeometry(0.0042,10,8),new THREE.MeshBasicMaterial({color:0x1a1f24,toneMapped:false}));
+      m.position.set(-0.0585+i*0.013,0.085,-0.031); sw.add(m); leds.push(m); } g.userData.leds=leds; }
+  // driver (outside cameras / ghost only)
+  if(opt.driver){ const S=M(0x1d2026,0.75,0.05), Hm=M(0xf3f3f1,0.22,0.25), Vi=M(0x101317,0.08,0.6);
+    box(0.36,0.46,0.22,S,[-0.02,0.42,-0.38],[-0.3,0,0],0.07); put(new THREE.SphereGeometry(0.135,18,14),Hm,[-0.02,0.84,-0.30]);
+    put(new THREE.SphereGeometry(0.137,18,10,-1.1,2.2,1.25,0.55),Vi,[-0.02,0.84,-0.30]);
+    mir(s=>{ tube([[s*0.17-0.02,0.58,-0.34],[s*0.16,0.52,0.0],[s*0.13,0.52,0.14]],0.04,S); tube([[s*0.12-0.02,0.15,-0.22],[s*0.10,0.17,0.40],[s*0.09,0.16,0.62]],0.05,S); }); }
+  // merge the static parts per material (one draw call each)
+  stat.updateMatrixWorld(true); const by=new Map();
+  stat.traverse(o=>{ if(!o.isMesh) return; let geo=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone(); geo.applyMatrix4(o.matrixWorld);
+    for(const k of Object.keys(geo.attributes)) if(!['position','normal','uv'].includes(k)) geo.deleteAttribute(k);
+    if(!geo.attributes.uv) geo.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count*2),2));
+    if(!by.has(o.material)) by.set(o.material,[]); by.get(o.material).push(geo); });
+  g.remove(stat);
+  by.forEach((geos,mat)=>{ const m=new THREE.Mesh(mergeGeometries(geos,false),mat); m.castShadow=!opt.cockpit; m.receiveShadow=true; g.add(m); });
+  sw.traverse(o=>{ if(o.isMesh){ o.castShadow=!opt.cockpit; o.receiveShadow=true; } });
+  return g;
+}
+
+/* ---------- cockpit kart: the same T4 Jr placed in the world at the kart's pose (stays level when you look around) ---------- */
+const kart=buildT4Kart({cockpit:true}); kart.visible=false; scene.add(kart);
 
 /* ---------- camera / modes ---------- */
 let yaw=0,pitch=-0.04,speed=22,mode='free',showKart=true;
@@ -1205,12 +1378,12 @@ function applyHash(){ const m=/cam=([-\d.,]+)/.exec(location.hash); if(!m) retur
 addEventListener('hashchange',applyHash);
 function mark(id){ if(id&&id!=='bLap') lastCam=id; ['bPit','bGrid','bAir','bLap','bTop','bDrive'].forEach(b=>document.getElementById(b).classList.toggle('on',b===id)); }
 function goStraight(){
-  if(PTS){ const [x,z,yw]=PTS.start[0]; pos.set(x,0.72,z); yaw=yw; }                    // pole position box
-  else if(LINE.length){ const a=LINE[spawnIdx],b=LINE[(spawnIdx+6)%LINE.length]; pos.set(a[0],0.72,a[1]); yaw=Math.atan2(b[0]-a[0],b[1]-a[1]); }
+  if(PTS){ const [x,z,yw]=PTS.start[0]; pos.set(x,0.95,z); yaw=yw; }                    // pole position box (helmet height)
+  else if(LINE.length){ const a=LINE[spawnIdx],b=LINE[(spawnIdx+6)%LINE.length]; pos.set(a[0],0.95,a[1]); yaw=Math.atan2(b[0]-a[0],b[1]-a[1]); }
   pitch=-0.05; mode='free'; speed=22; mark('bGrid'); }
 document.getElementById('bGrid').onclick=goStraight;
 document.getElementById('bPit').onclick=()=>{
-  if(PTS){ const [x,z,yw]=PTS.pit[24]; pos.set(x,0.72,z); yaw=yw; } else { pos.set(21.9,0.72,4.6); yaw=Math.PI+0.22; }
+  if(PTS){ const [x,z,yw]=PTS.pit[24]; pos.set(x,0.95,z); yaw=yw; } else { pos.set(21.9,0.95,4.6); yaw=Math.PI+0.22; }
   pitch=-0.03; mode='free'; speed=8; mark('bPit'); };
 document.getElementById('bAir').onclick=()=>{ pos.set(-5,240,-30); yaw=Math.PI; pitch=-1.2; mode='free'; speed=60; mark('bAir'); };
 document.getElementById('bLap').onclick=()=>{ if(mode==='lap'||mode==='pitout'){ mode='free'; mark(''); return; }
@@ -1224,16 +1397,7 @@ document.getElementById('bKart').onclick=e=>{ showKart=!showKart; e.target.class
 /* replay TV cameras: the same 10 trackside positions as data/cameras_0.ini in the AC package */
 let tv=false, TVC=[];
 fetch('data/tvcams.json').then(r=>r.json()).then(c=>{ TVC=c; }).catch(()=>{});
-const extKart=(()=>{ const g=new THREE.Group();
-  const M=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m||0});
-  const blue=M(0x1e63c8,0.35,0.1), dark=M(0x1b1c1e,0.6,0.3), tyre=M(0x111111,0.9), suit=M(0xe2632a,0.7), helm=M(0xf2f2f2,0.25,0.2);
-  const add=(geo,mat,x,y,z,rx,rz)=>{ const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); m.rotation.x=rx||0; m.rotation.z=rz||0; m.castShadow=true; g.add(m); };
-  add(new THREE.BoxGeometry(0.75,0.04,1.45),dark,0,0.07,0);
-  const wf=new THREE.CylinderGeometry(0.13,0.13,0.13,18), wr=new THREE.CylinderGeometry(0.14,0.14,0.2,18);
-  for(const sx of [-1,1]){ add(wf,tyre,sx*0.55,0.13,0.52,0,Math.PI/2); add(wr,tyre,sx*0.6,0.14,-0.5,0,Math.PI/2); add(new THREE.BoxGeometry(0.16,0.12,0.62),blue,sx*0.5,0.14,0); }
-  add(new THREE.BoxGeometry(0.9,0.14,0.35),blue,0,0.15,0.88); add(new THREE.BoxGeometry(1.15,0.1,0.18),blue,0,0.18,-0.82);
-  add(new THREE.BoxGeometry(0.36,0.42,0.22),suit,0,0.42,-0.18,0.35); add(new THREE.SphereGeometry(0.14,16,12),helm,0,0.74,-0.08);
-  g.visible=false; scene.add(g); return g; })();
+const extKart=(()=>{ const g=buildT4Kart({driver:true}); g.visible=false; scene.add(g); return g; })();
 document.getElementById('bTV').onclick=e=>{ tv=!tv; e.target.classList.toggle('on',tv);
   if(tv&&mode!=='lap'&&LINE.length){ lapS=CUM[spawnIdx]; lapT=0; lastLap=null; mode='lap'; mark('bLap'); } };
 document.getElementById('bGrip').onclick=e=>{ const on=GRIPU.uGripOn.value<0.5; GRIPU.uGripOn.value=on?1:0; e.target.classList.toggle('on',on); };
@@ -1242,10 +1406,12 @@ const GHOST={on:true,pts:null,dt:0.05,lap:null,mesh:null};
 fetch('data/bestline.json').then(r=>r.ok?r.json():null).then(d=>{ if(!d||!d.ghost||!d.ghost.pts||!d.ghost.pts.length) return;
   GHOST.pts=d.ghost.pts; GHOST.dt=d.ghost.dt||0.05; GHOST.lap=d.lapTime;
   const g=extKart.clone(true); g.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); o.material.transparent=true; o.material.opacity=0.42; o.material.depthWrite=false;
-    o.material.color.lerp(new THREE.Color(0x9fe6ff),0.55); o.material.emissive=new THREE.Color(0x0a2a3a); o.castShadow=false; } });
+    o.material.color.lerp(new THREE.Color(0x9fe6ff),0.55); if(o.material.emissive) o.material.emissive=new THREE.Color(0x0a2a3a); o.castShadow=false; } });   // (timer screen / LEDs are basic materials)
   g.visible=false; scene.add(g); GHOST.mesh=g; }).catch(()=>{});
 document.getElementById('bGhost').onclick=e=>{ GHOST.on=!GHOST.on; e.target.classList.toggle('on',GHOST.on); };
+{ const sc=document.createElement('script'); sc.src='lineopt.js'; sc.onload=()=>{ try{ window.T4OPT&&window.T4OPT.liveStart&&window.T4OPT.liveStart(); }catch(e){ console.warn('AI live learning',e); } }; document.head.appendChild(sc); }   // owner: the AI learns every lap
 function ghostUpdate(){ const G=GHOST; if(!G.mesh) return;
+  if(G.pending&&(!DRV.lapOn||DRV.lapT<0.3)){ G.pts=G.pending.pts; G.lap=G.pending.lap; G.pending=null; }   // the AI learned a faster lap: race that one from your next lap
   const show=G.on&&mode==='drive'&&DRV.lapOn&&G.pts; if(!show){ G.mesh.visible=false; return; }
   const f=DRV.lapT/G.dt, i=Math.floor(f); if(i>=G.pts.length-1){ G.mesh.visible=false; return; }
   const a=G.pts[i], b=G.pts[i+1], t=f-i, dh=Math.atan2(Math.sin(b[2]-a[2]),Math.cos(b[2]-a[2]));
@@ -1330,8 +1496,27 @@ function surfAt(x,z){                               // 'asphalt' | 'grip' | 'ker
   const d=SURF.d?px(SURF.d,x,z):null; if(d!==null&&SURF.d.d[d]>128) return (z<-105.5&&x<-6&&x>-152)?'sand':'gravel';   // owner: trackside 'sand' is gravel
   return 'grass';
 }
-const SURFP={asphalt:{mu:1.01,crr:0.015},grip:{mu:1.05,crr:0.015},patch:{mu:1.18,crr:0.015},gravel:{mu:0.72,crr:0.06},kerb:{mu:0.93,crr:0.022},sand:{mu:0.62,crr:0.20},grass:{mu:0.58,crr:0.09},water:{mu:0.45,crr:0.45}};
-const KM={m:155,Iz:42,a:0.60,b:0.44,mu0:2.1,P:11000,Fdrive:780,CdA:0.55,hcg:0.22,B:26,C:1.25,fF:1.0,fR:1.0,axle:4,vmax:27.8};   // owner: 'match or beat' the real T4 times - 225cc ~15 hp (~10 kW at the wheels), rev-limited ~100 km/h (55-65 mph), grip calibrated to the KartPlex T4 Senior lap (47.3 s, 2025 Cup R3)   // owner: understeer - neutral front/rear grip, sharper tyre (peak slip ~6.7 deg), lighter axle scrub (relieved further by inside-rear lift)
+const SURFP={asphalt:{mu:1.01,crr:0.015},grip:{mu:1.05,crr:0.015},patch:{mu:1.18,crr:0.015},gravel:{mu:0.72,crr:0.06},kerb:{mu:0.97,crr:0.018},sand:{mu:0.62,crr:0.20},grass:{mu:0.58,crr:0.09},water:{mu:0.45,crr:0.45}};
+/* ---------- the kart: Tillotson T4 Jr (T4 Series Junior regulations 2026 + Tillotson engine fiche) ----------
+   engine  TPP-225RS-02 (225 cc 4-stroke), PVL ignition limiter 7,500 rpm; Junior carb Tillotson FM19 (venturi 12.4-13.2 x 18.3 mm)
+           vs the Senior FM22 (18.2-18.7 x 25.1 mm): ~half the intake area -> torque falls away at high rpm (~10 hp vs ~15 hp Senior)
+  drive    Stinger 19T dry centrifugal clutch (engages ~3,300 rpm), chain, 71T rear sprocket (70-72T permitted): direct drive, no
+           gearbox - the force at the wheel follows the torque curve, so hairpin exits bog near clutch speed (momentum kart)
+  weight   140 kg minimum kart + driver (Senior 158 kg)
+  chassis  T-CHS-CS1, 1,040 mm wheelbase, 50 mm solid rear axle, rear width max 1,400 mm, 25 mm spindles (10 deg)
+  brakes   rear only: single disc, 19 mm master cylinder (R1 pads)
+  tyres    Maxxis T4 slick T-MAX-DRY3 (durable compound) on 130 / 212 mm rims, rear dia ~11 in
+  grip     ~1.9 g peak on asphalt (hard Maxxis compound). Check: the lap model puts the Jr 0.7 % behind a Senior (15 hp FM22, 158 kg)
+           on this layout - KartPlex 2026 Cup R8 qualifying: Jr pole 43.960 s vs Sr 43.542 s (+1.0 %), medians +0.6 % */
+const KM={m:140,Iz:38,a:0.60,b:0.44,mu0:1.90,CdA:0.50,hcg:0.21,B:26,C:1.25,fF:1.0,fR:1.0,axle:4,
+  gear:71/19,rT:0.1397,eta:0.88,clutch:3300,lim:7500,
+  Tq:[[2500,13.8],[3000,14.6],[4000,15.2],[5000,14.2],[6000,12.0],[7000,9.8],[7500,9.0]],   // Nm at the crank
+  drive(v){ const K=this, rpm=Math.max(K.clutch,Math.max(v,0)*60*K.gear/(2*Math.PI*K.rT)); if(rpm>=K.lim) return 0;
+    let T=K.Tq[K.Tq.length-1][1]; for(let i=1;i<K.Tq.length;i++){ if(rpm<=K.Tq[i][0]){ const [r0,t0]=K.Tq[i-1],[r1,t1]=K.Tq[i]; T=t0+(t1-t0)*Math.max(0,rpm-r0)/(r1-r0); break; } }
+    return T*K.gear/K.rT*K.eta; },                                                           // N at the rear tyres
+  rpm(v){ return Math.max(this.clutch,Math.max(v,0)*60*this.gear/(2*Math.PI*this.rT)); }};
+KM.vmax=KM.lim*2*Math.PI*KM.rT/(60*KM.gear);                                                // 29.4 m/s at the limiter (19/71)
+KM.Fdrive=Math.max(...[0,3,6,9,12,15,18].map(v=>KM.drive(v))); KM.P=Math.max(...Array.from({length:30},(_,k)=>KM.drive(k)*k));   // for the lap model / reports
 function tyre(alpha,mu,N){ return mu*N*Math.sin(KM.C*Math.atan(KM.B*alpha)); }
 function nearestLine(x,z,guess){                    // local search along the racing line for progress / reset
   let bi=guess,bd=1e9,n=LINE.length; for(let k=-60;k<=60;k++){ const i=((guess+k)%n+n)%n, d=(LINE[i][0]-x)**2+(LINE[i][1]-z)**2; if(d<bd){bd=d;bi=i;} }
@@ -1526,15 +1711,15 @@ function physics(h){
   for(let k=0;k<4;k++){ const dh=WH[k]-DRV.whP[k]; if(dh>0.002&&sp>2){ imp+=dh*sp; side+=(k%2===0?1:-1)*dh*sp; } }
   DRV.whP=WH; DRV.wh=WH;
   if(imp>0){ DRV.kj=Math.min(1,(DRV.kj||0)+imp*2.2); DRV.rr+=(Math.random()-0.5)*imp*1.6-side*0.5;     // jolt: unsettles the kart
-    const sc=Math.max(0.97,1-imp*0.12); DRV.vx*=sc; DRV.vz*=sc; shake=Math.max(shake,Math.min(0.03,imp*0.05)); }
+    const sc=Math.max(0.994,1-imp*0.02); DRV.vx*=sc; DRV.vz*=sc; shake=Math.max(shake,Math.min(0.03,imp*0.05)); }   // low, flat kerbs: a jolt, not a brake
   DRV.kj=(DRV.kj||0)*Math.exp(-h*7);
   if(!TL.ready&&SURF.ready&&LINE.length) buildTrackLimits();
-  const offAll=S.every(q=>q==='grass'||q==='sand'||q==='gravel'||q==='water') || (TL.ready&&WP.every(p=>pastLimits(p[0],p[1])));   // all four wheels off the track or past the white lines
+  const offAll=(DRV.lapOn&&DRV.valid) ? WP.filter((p,k)=>S[k]==='grass'||S[k]==='sand'||S[k]==='gravel'||S[k]==='water'||(TL.ready&&pastLimits(p[0],p[1]))).length>=3 : false;   // owner: two wheels inside is fine; three or more off the track / past the lines = invalid
   if(offAll&&DRV.lapOn&&DRV.valid){ DRV.valid=false; flash('Track limits - lap invalid'); }
   // inputs
   const dmax=0.34/(1+u*u/(PADC.wheel?1600:420)), delta=DRV.steer*dmax;     // owner: steering turned down (0.42 -> 0.34 rad max); wheel steers direct, pad keeps a light cap
   let Fx=0;
-  if(DRV.thr>0.02&&u>-0.5) Fx=DRV.thr*Math.min(KM.P/Math.max(u,2.5),KM.Fdrive)*Math.min(1,Math.max(0,(KM.vmax-u)/0.6));   // rev limiter (T4: 55-65 mph)
+  if(DRV.thr>0.02&&u>-0.5) Fx=DRV.thr*KM.drive(u)*Math.min(1,Math.max(0,(KM.vmax-u)/0.6));   // torque curve through the fixed gearing; limiter 7,500 rpm
   if(DRV.brk>0.02){ if(u>0.4) Fx-=DRV.brk*KM.m*g*1.2; else { DRV.rev+=h; if(DRV.rev>0.35&&u>-3) Fx-=DRV.brk*KM.m*g*0.15; } } else DRV.rev=0;
   // loads with longitudinal transfer, from the force the rear tyres can actually take
   let Nf=KM.m*g*KM.b/L, Nr=KM.m*g*KM.a/L, Fxr=Fx;
@@ -1542,7 +1727,7 @@ function physics(h){
     const lim=(Fx<0?0.9:0.95)*muR*Nr; Fxr=THREE.MathUtils.clamp(Fx,-lim,lim); }
   const ud=Math.max(Math.abs(u),3.0);
   const af=delta-Math.atan2(w+KM.a*DRV.rr,ud), ar=-Math.atan2(w-KM.b*DRV.rr,ud);
-  const kjm=1-0.3*(DRV.kj||0); Nf*=kjm; Nr*=kjm;                                   // tyres partly unloaded while bouncing over a kerb
+  const kjm=1-0.18*(DRV.kj||0); Nf*=kjm; Nr*=kjm;                                   // tyres partly unloaded while bouncing over a kerb
   const Fyf=tyre(af,muF,Nf), FyrMax=Math.sqrt(Math.max((0.4*muR*Nr)**2,(muR*Nr)**2-Fxr*Fxr)), Fyr=THREE.MathUtils.clamp(tyre(ar,muR,Nr),-FyrMax,FyrMax);
   let Fb=Fxr-Fyf*Math.sin(delta), Fl=Fyf*Math.cos(delta)+Fyr;
   // resistances oppose the velocity
@@ -1569,7 +1754,7 @@ function collide(){
       const qx=s.ax+dx*t, qz=s.az+dz*t; let nx=cx-qx, nz=cz-qz; const d=Math.hypot(nx,nz), lim=R+s.r;
       if(d<lim&&d>1e-6){ nx/=d; nz/=d; const pen=lim-d; DRV.x+=nx*pen; DRV.z+=nz*pen;
         const vn=DRV.vx*nx+DRV.vz*nz;
-        if(vn<0){ const hit=-vn; DRV.vx-=(1.25)*vn*nx; DRV.vz-=(1.25)*vn*nz; DRV.vx*=0.8; DRV.vz*=0.8;
+        if(vn<0){ const hit=-vn; DRV.hitV=Math.max(DRV.hitV||0,hit); DRV.vx-=(1.25)*vn*nx; DRV.vz-=(1.25)*vn*nz; DRV.vx*=0.8; DRV.vz*=0.8;
           DRV.rr+=(off*(nx*ch-nz*sh))*hit*0.6;
           if(hit>3){ shake=Math.min(0.05,hit*0.006); if(DRV.lapOn&&DRV.valid){ DRV.valid=false; flash('Contact - lap invalid'); } } } }
     }
@@ -1590,9 +1775,14 @@ function lapLogic(dt,px0,pz0){
     if(DRV.lapOn&&DRV.g1&&DRV.g2&&DRV.lapT>20){ DRV.last=DRV.lapT; const ok=DRV.valid;
       if(ok&&(!DRV.best||DRV.lapT<DRV.best)){ DRV.best=DRV.lapT; try{ localStorage.setItem('t4_best',String(DRV.best)); }catch(e){} flash('Best lap '+fmtT(DRV.lapT)); }
       else flash((ok?'Lap ':'Invalid lap ')+fmtT(DRV.lapT)); DRV.lastValid=ok; }
-    DRV.lapOn=true; DRV.lapT=0; DRV.valid=true; DRV.g1=DRV.g2=false;
+    if(DRV.lapOn&&DRV.g1&&DRV.g2&&DRV.lapT>20&&DRV.valid){ PLAP.last={t:DRV.lapT,pts:PLAP.rec.slice()}; if(!LAPP.bestT||DRV.lapT<LAPP.bestT){ LAPP.bestT=DRV.lapT; LAPP.best=LAPP.cur; } }   // your valid laps: the AI studies them; best-lap profile for the timer's delta
+    LAPP.cur=[]; DRV.lapN=(DRV.lapN||0)+1;
+    DRV.lapOn=true; DRV.lapT=0; DRV.valid=true; DRV.g1=DRV.g2=false; PLAP.rec=[]; PLAP.next=0;
   }
+  if(DRV.lapOn&&DRV.lapT>=PLAP.next){ PLAP.rec.push([+DRV.x.toFixed(2),+DRV.z.toFixed(2)]); PLAP.next=DRV.lapT+0.05; }
+  if(DRV.lapOn){ const b=Math.floor(DRV.prevS/5); if(LAPP.cur[b]==null) LAPP.cur[b]=DRV.lapT; DRV.delta=LAPP.best&&LAPP.best[b]!=null?DRV.lapT-LAPP.best[b]:null; } else DRV.delta=null;
 }
+const PLAP={rec:[],next:0,last:null}, LAPP={cur:[],best:null,bestT:null};
 function fmtT(t){ if(t==null) return '-:--.---'; const m=Math.floor(t/60), s=t-m*60; return m+':'+(s<10?'0':'')+s.toFixed(3); }
 
 document.getElementById('bDrive').onclick=()=>{ if(mode==='drive'){ mode='free'; mark(''); return; } driveStart(true); };
@@ -1603,7 +1793,7 @@ addEventListener('keydown',e=>{ if(mode!=='drive') return; if(['ArrowUp','ArrowD
   if(e.code==='KeyM') muted=!muted; });
 addEventListener('gamepadconnected',e=>flash((/dualsense|wireless controller|054c|playstation|ps5/i.test(e.gamepad.id)?'PS5 controller':'Controller')+' connected - press Drive kart, R2 gas / L2 brake'));
 addEventListener('gamepaddisconnected',()=>flash('Controller disconnected'));
-window.__t4drive={TL,pastLimits,buildTrackLimits,DRV,physics,lapLogic,surfAt,driveStart,KM,SURFP,kerbH,PADC,GHOST,get mode(){return mode;},get LINE(){return LINE;},get SPD(){return SPD;},get CUM(){return CUM;},get TOTAL(){return TOTAL;},get ready(){return SURF.ready&&WGRID.size>0;}};   // test hook
+window.__t4drive={TL,pastLimits,buildTrackLimits,PLAP,flash,TIMER,get kartC(){return kart;},get shake(){return shake;},set shake(v){shake=v;},DRV,physics,lapLogic,surfAt,driveStart,KM,SURFP,kerbH,PADC,GHOST,get mode(){return mode;},get LINE(){return LINE;},get SPD(){return SPD;},get CUM(){return CUM;},get TOTAL(){return TOTAL;},get ready(){return SURF.ready&&WGRID.size>0;}};   // test hook
 
 /* ---------- post: MSAA HDR target, subtle bloom, filmic output ---------- */
 const rt=new THREE.WebGLRenderTarget(2,2,{type:THREE.HalfFloatType,samples:mobile?0:4});
@@ -1634,7 +1824,7 @@ function loop(){
   if(mode==='pitout'&&PIT.length){
     const end=PCUM[PCUM.length-1]; pitS+=dt*(pitS>end-40?14:9); pitFrom[2]+=dt*9;
     const p=atPit(pitS),q=atPit(pitS+8), bl=Math.min(1,pitFrom[2]/5);
-    pos.set(pitFrom[0]+(p[0]-pitFrom[0])*bl,0.72,pitFrom[1]+(p[1]-pitFrom[1])*bl);
+    pos.set(pitFrom[0]+(p[0]-pitFrom[0])*bl,0.95,pitFrom[1]+(p[1]-pitFrom[1])*bl);
     let dy=Math.atan2(q[0]-p[0],q[1]-p[1])-yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); yaw+=dy*Math.min(1,dt*4);
     shakeY=Math.sin(t*29)*0.0015;
     if(pitS>=end){ const e=PIT[PIT.length-1]; let bi=0,bd=1e9; LINE.forEach((l,i)=>{ const dd=Math.hypot(l[0]-e[0],l[1]-e[1]); if(dd<bd){bd=dd;bi=i;} });
@@ -1643,7 +1833,7 @@ function loop(){
     curV=spdAt(lapS); const prevS=lapS; lapS+=dt*curV; lapT+=dt;
     if(Math.floor(lapS/TOTAL)>Math.floor(prevS/TOTAL)){ if(lapT>20) lastLap=lapT; lapT=0; }   // crossed the start/finish line
     const p=atLine(lapS),q=atLine(lapS+4+curV*0.3);
-    pos.set(p[0],0.72,p[1]);
+    pos.set(p[0],0.95,p[1]);
     let dy=Math.atan2(q[0]-p[0],q[1]-p[1])-yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
     yaw+=dy*Math.min(1,dt*6); pitch+=(-0.05-pitch)*Math.min(1,dt*4);
     shakeY=Math.sin(t*37)*0.0022+Math.sin(t*23.3)*0.0016;
@@ -1655,13 +1845,13 @@ function loop(){
     DRV.ky=(DRV.ky||0)+((WH[0]+WH[1]+WH[2]+WH[3])/4-(DRV.ky||0))*kf;                     // body lifts, pitches and rolls with the humps (no suspension on a kart)
     DRV.kp=(DRV.kp||0)+(((WH[0]+WH[1])-(WH[2]+WH[3]))/2/1.02-(DRV.kp||0))*kf;
     DRV.kr=(DRV.kr||0)+(((WH[0]+WH[2])-(WH[1]+WH[3]))/2/1.15-(DRV.kr||0))*kf;
-    pos.set(DRV.x-sh*0.1,0.72+DRV.ky,DRV.z-ch*0.1); yaw=DRV.h+DRV.look; pitch+=(-0.06+DRV.kp-pitch)*Math.min(1,dt*14);
+    pos.set(DRV.x-sh*0.36,0.95+DRV.ky,DRV.z-ch*0.36); yaw=DRV.h+DRV.look; pitch+=(-0.20+DRV.kp-pitch)*Math.min(1,dt*14);   // helmet cam (on top of the helmet, as in the onboard footage)
     DRV.kph=(DRV.kph||0)+spd*dt*2*Math.PI/0.45;
     shakeY=(DRV.kerb?Math.sin(DRV.kph)*0.0035*DRV.kerb/4*Math.min(1,spd/6):0)+Math.sin(t*37)*0.0012*Math.min(1,spd/10)+(DRV.surf==='grass'||DRV.surf==='sand'||DRV.surf==='gravel'?Math.sin(t*23)*0.004*Math.min(1,spd/6):0)+(shake>0?(Math.random()-0.5)*shake:0);
     shake*=Math.max(0,1-dt*6); if(DRV.msgT>0) DRV.msgT-=dt;
     if(DRV.kerb&&spd>3) padRumble(0.15+0.25*DRV.kerb/4,0.35+0.4*DRV.kerb/4,90); else if(shake>0.01) padRumble(Math.min(1,shake*25),Math.min(1,shake*15),120);
     const rpm=Math.max(DRV.thr>0.05?3000:1900,1900+Math.max(0,DRV.u||0)/24.3*4300); engineSound(rpm,DRV.thr); kerbSound(DRV.kerb/4,spd);
-    const wh=kart.userData.wheel; if(wh) wh.rotation.z=DRV.steer*1.5;
+    const wh=kart.userData.wheel; if(wh) wh.rotation.z=-DRV.steer*1.5; const ew=extKart.userData.wheel; if(ew) ew.rotation.z=-DRV.steer*1.5;
   } else {
     const f=new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch));
     const r=new THREE.Vector3(-Math.cos(yaw),0,Math.sin(yaw)),v=speed*dt;
@@ -1682,6 +1872,13 @@ function loop(){
   const low=pos.y<2.5;
   const tvOn=tv&&mode==='lap'&&TVC.length>0, chaseOn=mode==='drive'&&DRV.chase;
   kart.visible=showKart&&low&&!tvOn&&!chaseOn; extKart.visible=tvOn||chaseOn; ghostUpdate();
+  if(kart.visible){ if(mode==='drive'){ kart.position.set(DRV.x,DRV.ky||0,DRV.z); kart.rotation.set(-(DRV.kp||0),DRV.h,-(DRV.kr||0),'YXZ'); }
+    else { kart.position.set(pos.x+Math.sin(yaw)*0.36,Math.max(0,pos.y-0.95),pos.z+Math.cos(yaw)*0.36); kart.rotation.set(0,yaw,0); } }   // never below the track
+  if(mode==='drive'){ const u=Math.max(0,DRV.u||0), r=DRV.thr>0.05||u>4?KM.rpm(u):1800+Math.max(0,u)*120;                 // lap timer: rpm through the clutch, cylinder-head temperature
+    TIMER.rpm=(TIMER.rpm||1800)+(Math.min(KM.lim,r)-(TIMER.rpm||1800))*Math.min(1,dt*8);
+    TIMER.cht+=((120+95*(DRV.thr||0)*(TIMER.rpm/KM.lim)-0.9*u)-TIMER.cht)*Math.min(1,dt*0.08); timerDraw(dt,TIMER.rpm,false);
+    const lim=TIMER.rpm>KM.lim-120, blink=lim&&(performance.now()%200<100);
+    for(const L of [kart.userData.leds,extKart.userData.leds]) if(L) L.forEach((m,i)=>{ const on=lim?!blink:TIMER.rpm>=4200+i*330; m.material.color.setHex(on?(i<5?0x2bff6e:i<8?0xffb21e:0xff2a1e):0x1a1f24); }); }
   if(chaseOn){ DRV.camH=DRV.camH==null?DRV.h:DRV.camH; let dh=DRV.h-DRV.camH; dh=Math.atan2(Math.sin(dh),Math.cos(dh)); DRV.camH+=dh*Math.min(1,dt*5);
     const ca=DRV.camH+DRV.look; extKart.position.set(DRV.x,DRV.ky||0,DRV.z); extKart.rotation.set(-(DRV.kp||0),DRV.h,-(DRV.kr||0),'YXZ');
     cam.position.set(DRV.x-Math.sin(ca)*3.6,1.55,DRV.z-Math.cos(ca)*3.6); cam.lookAt(DRV.x+Math.sin(ca)*2.0,0.55,DRV.z+Math.cos(ca)*2.0); }
@@ -1691,14 +1888,15 @@ function loop(){
     cam.position.set(c.p[0],c.p[1],c.p[2]); cam.lookAt(pos.x,0.45,pos.z);
     const f=THREE.MathUtils.clamp(2*Math.atan(3.2/cam.position.distanceTo(extKart.position))*180/Math.PI,12,55);
     if(Math.abs(cam.fov-f)>0.05){ cam.fov=f; cam.updateProjectionMatrix(); }
-  } else { const fov=chaseOn?62:(low?80:60); if(cam.fov!==fov){ cam.fov=fov; cam.updateProjectionMatrix(); } }
+  } else { const fov=chaseOn?62:(low?(mode==='drive'?84:80):60); if(cam.fov!==fov){ cam.fov=fov; cam.updateProjectionMatrix(); } }   // drive: wide helmet-cam lens
   clouds.position.copy(cam.position);
   GRASS.U.uCenter.value.set(pos.x,pos.z); GRASS.U.uTime.value=t; GRASS.mesh.visible=pos.y<12;
   updateShadow(); QUAL.tick(dt);
   const dm=mode==='drive'; document.getElementById('dkeys').hidden=!dm; document.getElementById('fkeys').hidden=dm;
   QUAL.hudT+=dt; const hudNow=QUAL.hudT>0.1; if(hudNow) QUAL.hudT=0;
   if(!hudNow){} else if(dm){ const spd=Math.hypot(DRV.vx,DRV.vz);
-    hud.innerHTML='<b style="font-size:15px">'+(spd*3.6).toFixed(0)+'</b> km/h &middot; <b>'+(DRV.lapOn?fmtT(DRV.lapT):'out lap')+'</b>'+(DRV.lapOn&&!DRV.valid?' <span style="color:#e2632a">invalid</span>':'')
+    const AIL=window.T4OPT&&window.T4OPT.live&&window.T4OPT.live.on&&window.T4OPT.live.st?window.T4OPT.live.st.st:null;
+    hud.innerHTML='<b style="font-size:15px">'+(spd*3.6).toFixed(0)+'</b> km/h &middot; <b>'+(DRV.lapOn?fmtT(DRV.lapT):'out lap')+'</b>'+(DRV.lapOn&&!DRV.valid?' <span style="color:#e2632a">invalid</span>':'')+(AIL?' &middot; AI '+fmtT(AIL.best)+' <span style="opacity:.7">('+AIL.laps+' laps learned)</span>':'')
       +'<br>last '+fmtT(DRV.last)+(DRV.last!=null&&DRV.lastValid===false?'*':'')+' &middot; best <b>'+fmtT(DRV.best)+'</b>'
       +'<br>'+padLabel()+' &middot; '+DRV.surf+' &middot; e '+DRV.x.toFixed(0)+' n '+(-DRV.z).toFixed(0)
       +(DRV.wrong>1.5?'<br><b style="color:#e2632a">WRONG WAY</b>':'')+(DRV.msgT>0?'<br><b>'+DRV.msg+'</b>':'');
