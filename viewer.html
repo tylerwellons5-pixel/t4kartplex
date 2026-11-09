@@ -1191,7 +1191,7 @@ function kartTextures(){
   KTEX.weave.wrapS=KTEX.weave.wrapT=THREE.RepeatWrapping; KTEX.weave.repeat.set(3,3);
   return KTEX;
 }
-/* lap timer on the wheel (owner: 'add a kart timer with all features'): RPM shift lights, RPM, speed, running lap time, lap number,
+/* lap timer on the wheel (owner: 'add a kart timer with all features'): LED bar = delta to your best lap in tenths, RPM, speed, running lap time, lap number,
    last / best lap, live delta to your best lap, engine (cylinder-head) temperature, battery. One shared screen, redrawn 10x a second. */
 const TIMER={c:null,tex:null,t:0,cht:120};
 function timerTex(){ if(TIMER.tex) return TIMER.tex; const c=document.createElement('canvas'); c.width=512; c.height=288; TIMER.c=c;
@@ -1199,7 +1199,7 @@ function timerTex(){ if(TIMER.tex) return TIMER.tex; const c=document.createElem
 function timerDraw(dt,rpm,force){
   TIMER.t+=dt; if(!force&&TIMER.t<0.1) return; TIMER.t=0; const x=TIMER.c.getContext('2d'), W=512, H=288;
   x.fillStyle='#05080a'; x.fillRect(0,0,W,H);
-  x.fillStyle='#7f8a94'; x.font='600 16px Archivo, Arial, sans-serif'; x.textAlign='center'; x.fillText('T4 JR  #13',W/2,24);   // shift lights are the real LEDs above the screen
+  x.fillStyle='#7f8a94'; x.font='600 16px Archivo, Arial, sans-serif'; x.textAlign='center'; x.fillText('T4 JR  #13',W/2,24);   // the LEDs above the screen show the delta in tenths
   const lab=(t,px,py)=>{ x.fillStyle='#7f8a94'; x.font='600 18px Archivo, Arial, sans-serif'; x.textAlign='left'; x.fillText(t,px,py); };
   const val=(t,px,py,sz,col,al)=>{ x.fillStyle=col||'#f2f5f7'; x.font='800 '+sz+'px "DM Mono", monospace'; x.textAlign=al||'left'; x.fillText(t,px,py); };
   const sp=Math.hypot(DRV.vx||0,DRV.vz||0)*3.6, lt=DRV.lapOn?fmtT(DRV.lapT):'--:--.---';
@@ -1877,8 +1877,12 @@ function loop(){
   if(mode==='drive'){ const u=Math.max(0,DRV.u||0), r=DRV.thr>0.05||u>4?KM.rpm(u):1800+Math.max(0,u)*120;                 // lap timer: rpm through the clutch, cylinder-head temperature
     TIMER.rpm=(TIMER.rpm||1800)+(Math.min(KM.lim,r)-(TIMER.rpm||1800))*Math.min(1,dt*8);
     TIMER.cht+=((120+95*(DRV.thr||0)*(TIMER.rpm/KM.lim)-0.9*u)-TIMER.cht)*Math.min(1,dt*0.08); timerDraw(dt,TIMER.rpm,false);
-    const lim=TIMER.rpm>KM.lim-120, blink=lim&&(performance.now()%200<100);
-    for(const L of [kart.userData.leds,extKart.userData.leds]) if(L) L.forEach((m,i)=>{ const on=lim?!blink:TIMER.rpm>=4200+i*330; m.material.color.setHex(on?(i<5?0x2bff6e:i<8?0xffb21e:0xff2a1e):0x1a1f24); }); }
+    // owner: the LEDs show tenths - live delta to your best lap, one LED per 0.1 s, lit from the centre out:
+    // green to the right while you are ahead of your best, red to the left while you are behind (all 5 = half a second or more)
+    const d=DRV.lapOn&&DRV.delta!=null?DRV.delta:null, nT=d==null?0:Math.min(5,Math.floor(Math.abs(d)/0.1+1e-6));
+    for(const L of [kart.userData.leds,extKart.userData.leds]) if(L) L.forEach((m,i)=>{ let col=0x1a1f24;
+      if(d!=null){ if(d<0&&i>=5&&i-5<nT) col=0x2bff6e; else if(d>0&&i<=4&&4-i<nT) col=0xff2a1e; else if((i===4||i===5)&&nT===0) col=0x9fdcff; }   // within a tenth: centre pair blue
+      m.material.color.setHex(col); }); }
   if(chaseOn){ DRV.camH=DRV.camH==null?DRV.h:DRV.camH; let dh=DRV.h-DRV.camH; dh=Math.atan2(Math.sin(dh),Math.cos(dh)); DRV.camH+=dh*Math.min(1,dt*5);
     const ca=DRV.camH+DRV.look; extKart.position.set(DRV.x,DRV.ky||0,DRV.z); extKart.rotation.set(-(DRV.kp||0),DRV.h,-(DRV.kr||0),'YXZ');
     cam.position.set(DRV.x-Math.sin(ca)*3.6,1.55,DRV.z-Math.cos(ca)*3.6); cam.lookAt(DRV.x+Math.sin(ca)*2.0,0.55,DRV.z+Math.cos(ca)*2.0); }
