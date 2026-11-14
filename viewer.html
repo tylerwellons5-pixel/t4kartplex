@@ -233,6 +233,16 @@ const tl=new THREE.TextureLoader();
 const pavedType=tl.load('texture/pavedtype.png');
 const rubberTex=tl.load('texture/rubber.png'); rubberTex.anisotropy=8;   // rubbered racing line (from the T4 line + speed profile) + darker asphalt seen in the survey   // classification only: 1 = tarmac road/lot, 0 = concrete (pit apron, canopy floor, west pad)
 const maskTex=tl.load('texture/mask.png');
+/* terrain (terrain_build.py): USGS 3DEP 1 m lidar ground around the track - dirt piles in the north fill yard, the ditch behind the
+   north wall, pond banks, the mound east of T1. The racing surface, paving, barriers and buildings stay flat at y=0 (real track: ~0.4 m
+   over 250 m). int16 cm, 401 x 401 vertices at 1 m, row 0 = north +200 m (= viewer z -200), col 0 = east -200 m. */
+const TERR={h:null,tex:null};
+function TH(x,z){ const H=TERR.h; if(!H) return 0; const fx=x+200, fy=z+200; if(fx<0||fy<0||fx>=400||fy>=400) return 0;
+  const i=Math.floor(fx), j=Math.floor(fy), u=fx-i, v=fy-j, a=H[j*401+i], b=H[j*401+i+1], c=H[(j+1)*401+i], d=H[(j+1)*401+i+1];
+  return ((a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v)*0.01; }
+const TERRAIN=fetch('data/terrain.json').then(r=>{ if(!r.ok) throw 0; return r.json(); }).then(j=>{ const bs=atob(j.b64), u8=new Uint8Array(bs.length); for(let k=0;k<bs.length;k++) u8[k]=bs.charCodeAt(k); TERR.h=new Int16Array(u8.buffer);
+  const f=new Float32Array(TERR.h.length); for(let k=0;k<f.length;k++) f[k]=TERR.h[k]*0.01;
+  TERR.tex=new THREE.DataTexture(f,401,401,THREE.RedFormat,THREE.FloatType); TERR.tex.needsUpdate=true; return TERR; }).catch(()=>TERR);
 const grooveTex=tl.load('texture/groove.png'); grooveTex.anisotropy=8;   // groove_tex.py: rubbered racing groove + tyre streaks along the AI line (AC comparison)
 const dirtTex=tl.load('texture/dirt.png');
 const aggD=tl.load('texture/asphalt_d.jpg'), aggN=tl.load('texture/asphalt_n.jpg');   // 1.2 m tile of exposed aggregate in binder
@@ -359,8 +369,7 @@ let loaded=0;
 function done(){ if(++loaded>=5){ const l=document.getElementById('load'); if(l) l.remove(); } }
 const steel=new THREE.MeshStandardMaterial({color:0x3b3f45,roughness:0.42,metalness:0.75});
 const poleMat=new THREE.MeshStandardMaterial({color:0x575c61,roughness:0.7,metalness:0.3,envMapIntensity:0.45});   // weathered galvanised: darker than the sky in the onboard footage
-[['t4_ground',photoMat(0,1.0,MT.grassN,0.5),false,true,0.5],
- ['t4_asphalt',photoMat(1,0.9,aggN,1.0),false,true,1/2.5],
+[['t4_asphalt',photoMat(1,0.9,aggN,1.0),false,true,1/2.5],
  ['t4_paved',photoMat(3,0.92,aggN,0.8),false,true,1/2.5],
  ['t4_grip',photoMat(4,0.8,aggN,1.1),false,true,1/2.5]].forEach(([name,mat,cast,recv,uvs])=>{
   fetch('models/'+name+'.obj').then(r=>{ if(!r.ok) throw 0; return r.text(); }).then(t=>{
@@ -377,6 +386,12 @@ const poleMat=new THREE.MeshStandardMaterial({color:0x575c61,roughness:0.7,metal
     done();
   }).catch(()=>{ const l=document.getElementById('load'); if(l) l.textContent='Could not load '+name+'.'; });
 });
+TERRAIN.then(()=>{ const ST=mobile?2:1, N=400/ST+1, Q=N-1, pos=new Float32Array(N*N*3), uv=new Float32Array(N*N*2), idx=new Uint32Array(Q*Q*6); let t=0;   // ground = 1 m grid on the lidar terrain (2 m on phones)
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){ const k=j*N+i, e=i*ST-200, n=200-j*ST; pos[k*3]=e; pos[k*3+1]=-0.04+(TERR.h?TERR.h[(j*ST)*401+i*ST]*0.01:0); pos[k*3+2]=-n; uv[k*2]=e*0.5; uv[k*2+1]=n*0.5; }
+  for(let j=0;j<Q;j++) for(let i=0;i<Q;i++){ const a=j*N+i,b=a+1,c=a+N,d=c+1; idx[t++]=a; idx[t++]=c; idx[t++]=b; idx[t++]=b; idx[t++]=c; idx[t++]=d; }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.BufferAttribute(uv,2)); g.setIndex(new THREE.BufferAttribute(idx,1)); g.computeVertexNormals();
+  const m=new THREE.Mesh(g,photoMat(0,1.0,MT.grassN,0.5)); m.receiveShadow=true; m.castShadow=!mobile; scene.add(m); done();
+  if(GRASS) GRASS.U.uTer.value=TERR.tex; });
 { const g=new THREE.PlaneGeometry(9000,9000); g.rotateX(-Math.PI/2);
   const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x707853,roughness:1,envMapIntensity:0.3})); m.position.y=-1.0; scene.add(m); }
 
@@ -410,14 +425,17 @@ const GRASS=(()=>{
   const off=new Float32Array(count*3), r=rngFrom(99);
   for(let i=0;i<count;i++){ off[i*3]=r()*size; off[i*3+1]=r()*size; off[i*3+2]=r(); }
   g.setAttribute('aOff',new THREE.InstancedBufferAttribute(off,3)); g.instanceCount=count;
-  const U={uCenter:{value:new THREE.Vector2()},uSize:{value:size},uTime:{value:0},uMask:{value:maskTex},uDirt:{value:dirtTex}};
+  const U={uCenter:{value:new THREE.Vector2()},uSize:{value:size},uTime:{value:0},uMask:{value:maskTex},uDirt:{value:dirtTex},uTer:{value:TERR.tex}};
   const mat=new THREE.MeshStandardMaterial({side:THREE.DoubleSide,roughness:0.95,metalness:0,envMapIntensity:0.12});   // low sky reflection: blades were turning blue-grey
   mat.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,U);
     sh.vertexShader=sh.vertexShader
       .replace('#include <common>',`#include <common>
         attribute vec3 aOff; uniform vec2 uCenter; uniform float uSize; uniform float uTime;
-        uniform sampler2D uMask; uniform sampler2D uDirt; varying vec3 vGC;`)
+        uniform sampler2D uMask; uniform sampler2D uDirt; uniform sampler2D uTer; varying vec3 vGC;
+        float terr(vec2 w){ vec2 f=vec2(w.x+200.0,w.y+200.0); if(f.x<0.0||f.y<0.0||f.x>=400.0||f.y>=400.0) return 0.0; ivec2 i=ivec2(floor(f)); vec2 u=fract(f);
+          float a=texelFetch(uTer,i,0).r, b=texelFetch(uTer,i+ivec2(1,0),0).r, c=texelFetch(uTer,i+ivec2(0,1),0).r, d=texelFetch(uTer,i+ivec2(1,1),0).r;
+          return mix(mix(a,b,u.x),mix(c,d,u.x),u.y); }`)
       .replace('#include <begin_vertex>',`
         vec2 rel=mod(aOff.xy-uCenter,uSize)-uSize*0.5;
         vec2 w=uCenter+rel;
@@ -432,7 +450,7 @@ const GRASS=(()=>{
         float sway=sin(uTime*1.7+w.x*0.45+w.y*0.31)*0.2;
         vec3 transformed=vec3(w.x,0.0,w.y);
         transformed.xz+=vec2(-dir.y,dir.x)*position.x*0.0048;   // thinner blades: fine lawn, not fins
-        transformed.y=position.y*h;
+        transformed.y=position.y*h+terr(w);
         transformed.xz+=dir*(0.4+sway)*position.y*position.y*h;
         float vr=fract(aOff.z*13.7), dry=max(smoothstep(0.95,1.0,fract(aOff.z*7.3)),smoothstep(0.2,0.8,dz.g)*0.85);   // review: fewer dry speckles - the mown lawn reads smooth in the videos
         vec3 lawn=mix(vec3(0.050,0.062,0.024),vec3(0.074,0.092,0.036),vr);   // matched to the re-graded ground (more blue, blades no darker than the lawn)
@@ -651,7 +669,7 @@ function crownCards(n,seed,cone){
   }
   return mergeGeometries(parts);
 }
-fetch('data/trees.json').then(r=>r.json()).then(T=>{
+Promise.all([fetch('data/trees.json').then(r=>r.json()),TERRAIN]).then(([T])=>{
   const ltex=f=>{ const t=tl.load('texture/'+f); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; return t; };
   const leaf=ltex('leaf_oak3.png'),   /* leaf_tex3.py: irregular leaf clumps (round discs read as bubbles) */ needle=ltex('leaf_pine2.png');   // leaf_tex.py: many small leaves, soft edges (owner: textures 'not like roblox')
   const crownMat=new THREE.MeshStandardMaterial({map:leaf,alphaTest:0.36,alphaToCoverage:!mobile,side:THREE.DoubleSide,
@@ -685,11 +703,11 @@ fetch('data/trees.json').then(r=>r.json()).then(T=>{
   const M=new THREE.Matrix4(),q=new THREE.Quaternion(),s=new THREE.Vector3(),p=new THREE.Vector3(),c=new THREE.Color(),Z=new THREE.Matrix4().makeScale(0,0,0);
   const buckets=kinds.map(()=>[]);
   T.forEach(([x,z,r,h],i)=>{ const sp=SP[i], u=hsh(i+7);
-    if(sp==='palm'){ const ph=4.5+u*5; p.set(x,0,z); q.setFromEuler(new THREE.Euler((u-0.5)*0.12,0,(hsh(i+3)-0.5)*0.12)); s.set(1,ph,1); M.compose(p,q,s); ptr.setMatrixAt(i,M);
-      p.set(x,ph,z); q.setFromEuler(new THREE.Euler(0,u*6.28,0)); s.setScalar(1.25+u*0.4); M.compose(p,q,s); pcr.setMatrixAt(i,M); trunks.setMatrixAt(i,Z); return; }
+    if(sp==='palm'){ const ph=4.5+u*5, ty=TH(x,z); p.set(x,ty,z); q.setFromEuler(new THREE.Euler((u-0.5)*0.12,0,(hsh(i+3)-0.5)*0.12)); s.set(1,ph,1); M.compose(p,q,s); ptr.setMatrixAt(i,M);
+      p.set(x,ph+ty,z); q.setFromEuler(new THREE.Euler(0,u*6.28,0)); s.setScalar(1.25+u*0.4); M.compose(p,q,s); pcr.setMatrixAt(i,M); trunks.setMatrixAt(i,Z); return; }
     ptr.setMatrixAt(i,Z); pcr.setMatrixAt(i,Z);
     if(sp==='scrub'){ trunks.setMatrixAt(i,Z); buckets[i%3].push([i,x,z,1.5+u*2.2,1.3+hsh(i+11)*1.5,'scrub']); return; }
-    const pine=sp==='pine'; p.set(x,0,z); q.identity(); s.set(pine?0.75:1.15,pine?h*0.72:h*0.38,pine?0.75:1.15); M.compose(p,q,s); trunks.setMatrixAt(i,M);
+    const pine=sp==='pine'; p.set(x,TH(x,z),z); q.identity(); s.set(pine?0.75:1.15,pine?h*0.72:h*0.38,pine?0.75:1.15); M.compose(p,q,s); trunks.setMatrixAt(i,M);
     buckets[pine?3:i%3].push([i,x,z,h,r,sp]); });
   [trunks,ptr,pcr].forEach(m=>{ m.castShadow=true; scene.add(m); }); pcr.userData.noAO=true;
   const oak=[0xf2eadc,0xe6dece,0xfaf0dc,0xe0dacb,0xeee6d4].map(h=>new THREE.Color(h));
@@ -698,9 +716,10 @@ fetch('data/trees.json').then(r=>r.json()).then(T=>{
     const L=buckets[k]; if(!L.length) return;
     const im=new THREE.InstancedMesh(g,k===3?pineMat:crownMat,L.length); im.userData.noAO=true;   // alpha-tested cards: kept out of the AO pass (it ignores alpha -> dark shards)
     L.forEach(([i,x,z,hh,r,sp],j)=>{
-      if(sp==='scrub'){ p.set(x,hh*0.45,z); s.set(r,hh*0.55,r*(0.85+hsh(i+5)*0.3)); }
-      else if(sp==='pine'){ p.set(x,hh*0.8,z); s.set(r*0.78,hh*0.3,r*0.78); }   // fuller crowns (footage), not lollipops
-      else { p.set(x,hh*0.6,z); s.set(r*1.15,hh*0.3,r*1.15*(0.88+hsh(i+9)*0.24)); }
+      const ty=TH(x,z);   // on the lidar terrain
+      if(sp==='scrub'){ p.set(x,hh*0.45+ty,z); s.set(r,hh*0.55,r*(0.85+hsh(i+5)*0.3)); }
+      else if(sp==='pine'){ p.set(x,hh*0.8+ty,z); s.set(r*0.78,hh*0.3,r*0.78); }   // fuller crowns (footage), not lollipops
+      else { p.set(x,hh*0.6+ty,z); s.set(r*1.15,hh*0.3,r*1.15*(0.88+hsh(i+9)*0.24)); }
       q.setFromEuler(new THREE.Euler(0,i*1.37,0)); M.compose(p,q,s); im.setMatrixAt(j,M);
       im.setColorAt(j,c.copy((sp==='pine'?pin:sp==='scrub'?scr:oak)[i%3]));
     });
