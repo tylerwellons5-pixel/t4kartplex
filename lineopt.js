@@ -137,7 +137,7 @@ function makeDriver(path,KM,PADC,REF){
     const D=T().DRV, phys=T().physics, h=1/300, Lw=KM.a+KM.b;
     const save=JSON.stringify(D), MR=Math.random; let sd=12345; const RND=()=>{ sd=(sd*1664525+1013904223)>>>0; return sd/4294967296; }; Math.random=RND;   // deterministic kerb jolts: fair comparisons
     let i=startIdx, x=path.x[i], z=path.z[i];
-    Object.assign(D,{x,z,h:H[i],vx:Math.sin(H[i])*path.v[i]*0.9,vz:Math.cos(H[i])*path.v[i]*0.9,rr:path.v[i]*kp[i]*0.9,steer:0,thr:0,brk:0,kj:0,whP:null,rev:0,lapOn:false,valid:true});
+    Object.assign(D,{x,z,h:H[i],vx:Math.sin(H[i])*path.v[i]*0.9,vz:Math.cos(H[i])*path.v[i]*0.9,rr:path.v[i]*kp[i]*0.9,steer:0,thr:0,brk:0,kj:0,whP:null,rev:0,lapOn:false,valid:true,tyreT:65});   // AI laps on warm tyres
     const bad=new Uint8Array(N), errMax=new Float64Array(N), times=[], rec={thr:new Float64Array(N),brk:new Float64Array(N),v:new Float64Array(N),steer:new Float64Array(N),lat:new Float64Array(N)};
     let t=0, lapStart=null, crossed=0, prevI=i, maxSteps=Math.round((laps+1.3)*80/h), traj=[], trajBest=null, tBest=1e9, nextRec=0;
     for(let step=0;step<maxSteps;step++){
@@ -325,7 +325,7 @@ function startJob(J){ const L=LIVE.st, path=J.off?L.model.lap(J.off,true):L.path
   LIVE.gen=drv.lapRunG(J.kind==='your line',(L.N-RUNUP)%L.N,1,true); LIVE.aiSnap=null; }
 function liveTick(){
   if(!LIVE.on) return; const t4=T();
-  if(t4.mode!=='drive'||!t4.GHOST.on||document.hidden){ setTimeout(()=>requestAnimationFrame(liveTick),400); return; }
+  if(t4.mode!=='drive'||!t4.GHOST.on||document.hidden||(window.T4RACE&&window.T4RACE.active)){ setTimeout(()=>requestAnimationFrame(liveTick),400); return; }   // paused while racing
   const L=LIVE.st, D=t4.DRV;
   if(!LIVE.gen){ LIVE.job=nextJob(); startJob(LIVE.job); }
   const user=JSON.stringify(D), sh=t4.shake; if(LIVE.aiSnap) Object.assign(D,JSON.parse(LIVE.aiSnap));

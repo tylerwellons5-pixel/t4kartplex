@@ -125,8 +125,8 @@ renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 
 const scene=new THREE.Scene();
-const FOG=new THREE.Color(0xa9c1d8);
-scene.fog=new THREE.Fog(FOG,230,1150);
+const FOG=new THREE.Color(0xb3c6da);
+scene.fog=new THREE.Fog(FOG,140,1250);   // AC comparison: aerial perspective - the far treeline sits in a pale blue haze (onboard: distant trees hazy)
 const SUN=new THREE.Vector3(150,150,55).normalize();       // morning sun from the east-south-east, ~42 deg up (review: long tree / pole shadows across the track in the newer video; none from the canopy)
 
 /* ---------- physical sky + matching image-based light ---------- */
@@ -187,8 +187,8 @@ scene.add(clouds);
 
 const cam=new THREE.PerspectiveCamera(80,1,0.15,4200);
 scene.add(cam);
-const hemi=new THREE.HemisphereLight(0xd3e2f2,0x5c5946,1.1); scene.add(hemi);
-const sun=new THREE.DirectionalLight(0xfff0d8,7.2);
+const hemi=new THREE.HemisphereLight(0xd3e2f2,0x5c5946,0.85);   // AC comparison: less flat fill so sun / shadow contrast reads like Florida midday scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff0d8,7.6);
 sun.castShadow=true;
 sun.shadow.mapSize.set(mobile?2048:4096,mobile?2048:4096);
 const SC=sun.shadow.camera; SC.near=100; SC.far=900;
@@ -233,6 +233,7 @@ const tl=new THREE.TextureLoader();
 const pavedType=tl.load('texture/pavedtype.png');
 const rubberTex=tl.load('texture/rubber.png'); rubberTex.anisotropy=8;   // rubbered racing line (from the T4 line + speed profile) + darker asphalt seen in the survey   // classification only: 1 = tarmac road/lot, 0 = concrete (pit apron, canopy floor, west pad)
 const maskTex=tl.load('texture/mask.png');
+const grooveTex=tl.load('texture/groove.png'); grooveTex.anisotropy=8;   // groove_tex.py: rubbered racing groove + tyre streaks along the AI line (AC comparison)
 const dirtTex=tl.load('texture/dirt.png');
 const aggD=tl.load('texture/asphalt_d.jpg'), aggN=tl.load('texture/asphalt_n.jpg');   // 1.2 m tile of exposed aggregate in binder
 for(const t of [aggD,aggN]){ t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=renderer.capabilities.getMaxAnisotropy(); }   // worn sand/dirt runoff beside the asphalt (AC: 1SAND_dirt)
@@ -264,7 +265,7 @@ function photoMat(kind,rough,nrm,ns){
     polygonOffset:kind===1||kind===3||kind===4,polygonOffsetFactor:kind===4?-4:kind===1?-3:-1.5,polygonOffsetUnits:kind===4?-4:kind===1?-3:-1.5});   // track always wins over the ground: no clipping
   m.customProgramCacheKey=()=>'mat-kind-'+kind;
   m.onBeforeCompile=sh=>{
-    Object.assign(sh.uniforms,{uCrack:{value:crackTex},uPT:{value:pavedType},uRub:{value:rubberTex},uDet:{value:detail},uMask:{value:maskTex},uDirt:{value:dirtTex},
+    Object.assign(sh.uniforms,{uCrack:{value:crackTex},uPT:{value:pavedType},uRub:{value:rubberTex},uGroove:{value:grooveTex},uDet:{value:detail},uMask:{value:maskTex},uDirt:{value:dirtTex},
       uGrass:{value:MT.grass},uSand:{value:MT.sand},uGrav:{value:MT.grav},uConc:{value:MT.conc},uAsph:{value:MT.asph},uRoof:{value:MT.roof}},GRIPU);
     sh.vertexShader=sh.vertexShader
       .replace('#include <common>','#include <common>\nvarying vec3 vWP;')
@@ -272,7 +273,7 @@ function photoMat(kind,rough,nrm,ns){
     sh.fragmentShader=sh.fragmentShader
       .replace('#include <common>','#include <common>\nvarying vec3 vWP; uniform sampler2D uRub; uniform sampler2D uPT; uniform sampler2D uDet; uniform sampler2D uMask; uniform sampler2D uDirt;'+
         ' uniform sampler2D uGrass; uniform sampler2D uSand; uniform sampler2D uGrav; uniform sampler2D uConc; uniform sampler2D uAsph; uniform sampler2D uRoof;'+
-        ' uniform sampler2D uGripTex; uniform float uGripOn; uniform sampler2D uCrack; float gRough=1.0;'+MATGLSL)
+        ' uniform sampler2D uGripTex; uniform float uGripOn; uniform sampler2D uCrack; uniform sampler2D uGroove; float gRough=1.0;'+MATGLSL)
       .replace('#include <map_fragment>',`
         vec2 auv=vec2((vWP.x+200.0)/400.0,(200.0-vWP.z)/400.0);
         vec2 w=vec2(vWP.x,-vWP.z);                                            // east, north in metres
@@ -281,7 +282,11 @@ function photoMat(kind,rough,nrm,ns){
         vec3 alb;
         ${kind===0?`
           vec3 grass=tileMix(uGrass,w,2.0,5.3,0.35);                            // scanned lawn (ambientCG Grass004, CC0)
-          grass*=mix(vec3(0.361,0.286,0.100),vec3(0.391,0.307,0.110),macro)*vec3(0.98,1.40,1.18);   // review: greener, as in the newer video (Punchy 242 s lawn ~113,149,79); 29 onboard frames: sunlit lawn ~ asphalt x (1.00, 1.12, 0.62) - greener than first matched
+          grass*=mix(vec3(0.361,0.286,0.100),vec3(0.391,0.307,0.110),macro)*vec3(1.02,1.33,2.10);   // AC comparison: less saturated - real lawn has ~2x the blue of the old grade (footage ~89,105,70 in sun, ours was 94,117,51)
+          float pa=texture2D(uDet,w*0.0065).r*0.65+texture2D(uDet,w*0.023+0.4).r*0.35, pb=texture2D(uDet,rot2(w,0.6)*0.047+0.2).r, pc=texture2D(uDet,w*0.83+0.1).r;
+          grass=mix(grass,grass*vec3(1.17,1.08,0.80),smoothstep(0.50,0.78,pa)*0.6);   // sun-dried, yellower patches tens of metres across (onboard 134 s, 242 s)
+          grass*=0.89+0.19*pb;                                                         // lusher / thinner areas: breaks the tiling at distance
+          grass*=mix(1.0,0.80,smoothstep(0.70,0.92,pc)*0.55);                          // darker weed / clover clumps   // review: greener, as in the newer video (Punchy 242 s lawn ~113,149,79); 29 onboard frames: sunlit lawn ~ asphalt x (1.00, 1.12, 0.62) - greener than first matched
           float mow=sin(dot(w,vec2(0.0,1.0))*1.75+sin(w.x*0.013)*2.0);                // mowing stripes ~1.8 m wide, as in the aerial
           grass*=1.0+0.055*sign(mow)*smoothstep(0.0,0.35,abs(mow));         // even Florida yellow-green, matched to the footage
           vec3 conc=tileMix(uConc,w,3.0,7.1,0.25); conc=mix(conc,vec3(dot(conc,vec3(0.3,0.59,0.11))),0.65)*1.12*(0.92+0.16*macro);   // light-grey concrete   // Poly Haven concrete_floor_03
@@ -309,8 +314,12 @@ function photoMat(kind,rough,nrm,ns){
           alb=tileMix(uAsph,w,2.5,6.3,0.25)*vec3(0.974,1.0,0.910)*3.45*mix(0.9,1.08,macro);   // review: -6% after the sun moved east (Punchy 242 s asphalt ~126)   // 14 onboard frames: asphalt ~131,126,123 (slightly warm)   // Poly Haven asphalt_track scan, lifted to the aged grey in the onboard footage
           float gg=texture2D(uGripTex,auv).r;
           float rub=texture2D(uRub,vec2((vWP.x+154.0)/280.0,(6.0-vWP.z)/116.0)).r;   // darkness traced from the survey (grip strips, rubber, skid marks), 6.8 cm/px
-          alb*=pow(max(1.0-0.5*rub,0.02),2.2);                                   // same brightness ratio as the real surface
+          alb*=pow(max(1.0-0.56*rub,0.02),2.2);                                  // AC comparison + onboard 142 s: the rubbered line reads clearly darker than the edges
+          float od=texture2D(uDet,w*2.7+0.7).r, od2=texture2D(uDet,rot2(w,1.3)*0.61).r;
+          alb*=1.0-0.30*smoothstep(0.84,0.97,od)*smoothstep(0.35,0.8,od2)*smoothstep(0.05,0.4,rub);   // oil drips / rubber blobs where karts run
           gRough=mix(1.0,0.86,rub);
+          float gv=texture2D(uGroove,vec2((vWP.x+154.0)/280.0,(6.0-vWP.z)/116.0)).r;   // the line karts use: darker, slightly smoother rubber
+          alb*=1.0-0.34*gv*(0.8+0.4*macro); gRough=mix(gRough,0.78,gv*0.6);
           alb=mix(alb,vec3(0.62,0.17,0.02),gg*0.8*uGripOn);
           float dtA=smoothstep(0.06,0.55,texture2D(uDirt,auv).r);                // sand blown onto the asphalt next to dirt
           vec3 sA=tileMix(uGrav,w,1.1,2.9,0.4)*vec3(1.17,1.04,0.74)*0.22;          // tan gravel dust thrown onto the asphalt
@@ -392,7 +401,7 @@ fetch('data/floods.json').then(r=>r.json()).then(list=>{
 
 /* ---------- 3D grass blades, world-fixed, wrapped around the camera ---------- */
 const GRASS=(()=>{
-  const count=mobile?40000:220000, size=mobile?22:34;
+  const count=mobile?40000:240000, size=mobile?20:27;   // denser near the camera
   const base=new THREE.BufferGeometry();
   base.setAttribute('position',new THREE.Float32BufferAttribute([-1,0,0, 1,0,0, -0.55,0.5,0, 0.55,0.5,0, 0,1,0],3));
   base.setAttribute('normal',new THREE.Float32BufferAttribute([0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0],3));
@@ -402,7 +411,7 @@ const GRASS=(()=>{
   for(let i=0;i<count;i++){ off[i*3]=r()*size; off[i*3+1]=r()*size; off[i*3+2]=r(); }
   g.setAttribute('aOff',new THREE.InstancedBufferAttribute(off,3)); g.instanceCount=count;
   const U={uCenter:{value:new THREE.Vector2()},uSize:{value:size},uTime:{value:0},uMask:{value:maskTex},uDirt:{value:dirtTex}};
-  const mat=new THREE.MeshStandardMaterial({side:THREE.DoubleSide,roughness:0.95,metalness:0,envMapIntensity:0.32});
+  const mat=new THREE.MeshStandardMaterial({side:THREE.DoubleSide,roughness:0.95,metalness:0,envMapIntensity:0.12});   // low sky reflection: blades were turning blue-grey
   mat.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,U);
     sh.vertexShader=sh.vertexShader
@@ -422,12 +431,12 @@ const GRASS=(()=>{
         float ang=aOff.z*40.0; vec2 dir=vec2(cos(ang),sin(ang));
         float sway=sin(uTime*1.7+w.x*0.45+w.y*0.31)*0.2;
         vec3 transformed=vec3(w.x,0.0,w.y);
-        transformed.xz+=vec2(-dir.y,dir.x)*position.x*0.008;
+        transformed.xz+=vec2(-dir.y,dir.x)*position.x*0.0048;   // thinner blades: fine lawn, not fins
         transformed.y=position.y*h;
         transformed.xz+=dir*(0.4+sway)*position.y*position.y*h;
         float vr=fract(aOff.z*13.7), dry=max(smoothstep(0.95,1.0,fract(aOff.z*7.3)),smoothstep(0.2,0.8,dz.g)*0.85);   // review: fewer dry speckles - the mown lawn reads smooth in the videos
-        vec3 lawn=mix(vec3(0.017,0.032,0.0076),vec3(0.029,0.053,0.0127),vr);
-        vGC=mix(lawn,vec3(0.20,0.18,0.09),dry*0.7)*(0.80+0.38*position.y)*(0.90+0.2*fract(aOff.z*7.0))*(1.0-0.5*mk.b);   // less blade-to-blade contrast: not grainy close up`);
+        vec3 lawn=mix(vec3(0.050,0.062,0.024),vec3(0.074,0.092,0.036),vr);   // matched to the re-graded ground (more blue, blades no darker than the lawn)
+        vGC=mix(lawn,vec3(0.105,0.095,0.045),dry*0.7)*(0.86+0.20*position.y)*(0.90+0.2*fract(aOff.z*7.0))*(1.0-0.5*mk.b);   // less blade-to-blade contrast: not grainy close up`);
     sh.fragmentShader=sh.fragmentShader
       .replace('#include <common>','#include <common>\nvarying vec3 vGC;')
       .replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb=vGC;');
@@ -458,6 +467,16 @@ fetch('data/kerbs.json').then(r=>r.json()).then(all=>{ for(const variant of ['fa
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
   g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
   const m=new THREE.MeshStandardMaterial({map:kerbTexture(variant==='worn'?'kerb_worn.jpg':variant==='red'?'kerb_red.jpg':'kerb.jpg'),roughness:0.62,metalness:0,envMapIntensity:0.35,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+  m.customProgramCacheKey=()=>'kerb-wear';
+  m.onBeforeCompile=sh=>{ sh.uniforms.uDet={value:detail}; sh.uniforms.uRub={value:rubberTex};      // AC comparison: kerbs carry rubber on the track side and blown dust on the grass side
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWPk;').replace('#include <begin_vertex>','#include <begin_vertex>\nvWPk=(modelMatrix*vec4(transformed,1.0)).xyz;');
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWPk; uniform sampler2D uDet; uniform sampler2D uRub;')
+      .replace('#include <map_fragment>',`#include <map_fragment>
+        vec2 wk=vec2(vWPk.x,-vWPk.z); float k1=texture2D(uDet,wk*1.3).r, k2=texture2D(uDet,wk*0.21+0.3).r, k3=texture2D(uDet,vec2(wk.x*4.0,wk.y*0.35)+vec2(0.0,wk.x)).r;
+        float rbk=texture2D(uRub,vec2((vWPk.x+154.0)/280.0,(6.0-vWPk.z)/116.0)).r;
+        float side=vMapUv.y;                                                   // v=1 on the track side
+        diffuseColor.rgb*=1.0-(0.30*smoothstep(0.05,0.5,rbk)+0.18*smoothstep(0.45,1.0,side))*smoothstep(0.35,0.75,k2*0.7+k3*0.5);   // tyre rubber, heavier on the track edge
+        diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*0.55+vec3(0.20,0.17,0.12)*0.5,smoothstep(0.62,0.0,side)*smoothstep(0.45,0.85,k1)*0.45);   // sand / dust on the grass side`); };
   const mesh=new THREE.Mesh(g,m); mesh.receiveShadow=true; mesh.castShadow=true; scene.add(mesh); }
 }).catch(()=>{});
 
@@ -565,24 +584,53 @@ fetch('data/redwhite.json').then(r=>r.json()).then(list=>{
     const n=Math.max(1,Math.round(len/2.0)), ang=Math.atan2(dy,dx);
     for(let k=0;k<n;k++){ const t=(k+0.5)/n, e=a[0]+dx*t, nn=a[1]+dy*t; blocks.push([e,nn,ang,rwColour(blocks.length,s,e,nn)]); s+=len/n; } });
   const r0=rngFrom(311), hgt=(u,v)=>{ let h=0; const g=Math.abs(v-0.56); if(g<0.035) h-=1-g/0.035; const e=Math.min(u,1-u); if(e<0.05) h-=(1-e/0.05)*0.6; return h; };
-  const blkTex=canvasTex(256,128,(x,w,h)=>{ const im=x.createImageData(w,h);           // review: moulded water-filled plastic (Punchy 249-298 s), not flat slabs
+  const blkTex=canvasTex(512,256,(x,w,h)=>{ const im=x.createImageData(w,h);   // AC comparison: weathered, grimy plastic (Punchy 275 s: black tyre marks, dirty bases)           // review: moulded water-filled plastic (Punchy 249-298 s), not flat slabs
     for(let j=0;j<h;j++) for(let i=0;i<w;i++){ const u=i/w, v=1-j/h, k=(j*w+i)*4; let c=1.0;
       c*=1+0.10*hgt(u,v); if(Math.abs(v-0.585)<0.012) c*=1.06;                             // groove with a lit upper lip
-      c*=1-0.30*Math.pow(Math.max(0,1-v/0.32),1.6);                                        // dirt and splash toward the ground
+      c*=1-0.42*Math.pow(Math.max(0,1-v/0.36),1.4);                                        // dirt and splash toward the ground
+      c*=0.94+0.06*Math.sin(u*37.0+Math.sin(v*9.0)*2.0)*Math.sin(v*23.0+u*5.0);                  // uneven sun fading
       const e=Math.min(u,1-u); if(e<0.05) c*=0.88+0.12*e/0.05;                              // rounded, shaded ends
       const dirt=1-0.22*Math.pow(Math.max(0,1-v/0.32),1.6);
       im.data[k]=255*c; im.data[k+1]=255*c*(0.97+0.03*dirt); im.data[k+2]=255*c*(0.92+0.08*dirt); im.data[k+3]=255; }
     x.putImageData(im,0,0);
-    for(let i=0;i<46;i++){ x.globalAlpha=0.05+r0()*0.12; x.fillStyle=r0()<0.6?'#5a5048':'#2b2b2d'; x.fillRect(r0()*w,h*(0.35+0.6*r0()),2+r0()*26,1+r0()*5); }   // scuffs and tyre marks
-    for(let i=0;i<18;i++){ x.globalAlpha=0.04+r0()*0.06; x.fillStyle='#6b6258'; x.fillRect(r0()*w,0,1+r0()*3,h*(0.2+0.5*r0())); }                        // rain streaks from the top
+    for(let i=0;i<40;i++){ x.globalAlpha=0.025+r0()*0.05; x.fillStyle=r0()<0.6?'#5a5048':'#3a3a3c'; x.beginPath(); x.ellipse(r0()*w,h*(0.30+0.65*r0()),6+r0()*30,3+r0()*9,(r0()-0.5)*0.4,0,6.3); x.fill(); }   // soft scuffs
+    for(let i=0;i<3;i++){ x.globalAlpha=0.08+r0()*0.10; x.strokeStyle='#1c1c1c'; x.lineWidth=4+r0()*8; x.beginPath(); const yy=h*(0.45+0.4*r0()), xx=r0()*w;   // black tyre marks from kart contact
+      x.moveTo(xx,yy); x.quadraticCurveTo(xx+30+r0()*60,yy+(r0()-0.5)*14,xx+60+r0()*120,yy+(r0()-0.5)*20); x.stroke(); }
+    for(let i=0;i<30;i++){ x.globalAlpha=0.03+r0()*0.05; x.fillStyle='#6b6258'; x.fillRect(r0()*w,0,1+r0()*2,h*(0.2+0.5*r0())); }                        // rain streaks from the top
     x.globalAlpha=1; });
-  const blkN=nrmFromHeight(256,128,(i,j)=>hgt(i/256,1-j/128)*6,1.6);
+  const blkN=nrmFromHeight(256,128,(i,j)=>hgt(i/256,1-j/128)*6,1.6);   // normal map stays 256x128 (same mould)
   const mat=new THREE.MeshStandardMaterial({map:blkTex,normalMap:blkN,roughness:0.88,metalness:0,envMapIntensity:0.14});   // matte, weathered plastic
   const im=new THREE.InstancedMesh(g,mat,blocks.length), M=new THREE.Matrix4(), q=new THREE.Quaternion(), c=new THREE.Color(), r=rngFrom(77);
   blocks.forEach(([x,n,ang,red],i)=>{ q.setFromAxisAngle(new THREE.Vector3(0,1,0),ang); M.compose(new THREE.Vector3(x,0,-n),q,new THREE.Vector3(1,1,1));
-    im.setMatrixAt(i,M); const f=0.86+0.18*r(); im.setColorAt(i,red===1?c.setRGB(0.19*f,0.027*f,0.030*f):red===3?c.setRGB(0.017*f,0.072*f,0.245*f):red===2?c.setRGB(0.12*f,0.12*f,0.13*f):c.setRGB(0.39*f,0.38*f,0.35*f)); });   // white: off-white, weathered   // 3 = blue (video ~15,42,77 in sun)   // white: weathered off-white, not glowing (owner)
+    im.setMatrixAt(i,M); const f=0.86+0.18*r(); im.setColorAt(i,red===1?c.setRGB(0.165*f,0.034*f,0.034*f):red===3?c.setRGB(0.026*f,0.076*f,0.205*f):red===2?c.setRGB(0.12*f,0.12*f,0.13*f):c.setRGB(0.355*f,0.35*f,0.325*f)); });   // AC comparison: muted, sun-faded plastic (was toy-saturated)   // white: off-white, weathered   // 3 = blue (video ~15,42,77 in sun)   // white: weathered off-white, not glowing (owner)
   im.castShadow=true; im.receiveShadow=true; scene.add(im);
 }).catch(()=>{});
+
+/* ---------- unmown grass at the foot of barriers, tyre walls and fences (AC comparison; onboard 142 s, 275 s: longer grass and weeds
+   where the mower cannot reach). Placed only where the surface map says grass. ---------- */
+(()=>{
+  const tuftTex=canvasTex(128,128,(x,w,h)=>{ const r=rngFrom(515); x.clearRect(0,0,w,h); x.lineCap='round';
+    for(let k=0;k<64;k++){ const bx=w*(0.12+0.76*r()), lean=(r()-0.5)*w*0.55, top=h*(0.04+0.55*r()), g=86+r()*62, dry=r()<0.3;
+      x.strokeStyle=dry?`rgb(${(g*1.05)|0},${(g*0.98)|0},${(g*0.62)|0})`:`rgb(${(g*0.72)|0},${g|0},${(g*0.48)|0})`; x.lineWidth=1.1+r()*1.7;
+      x.beginPath(); x.moveTo(bx,h); x.quadraticCurveTo(bx+lean*0.25,h*0.62,bx+lean,top); x.stroke(); } });
+  tuftTex.colorSpace=THREE.SRGBColorSpace;
+  const tg=mergeGeometries([0,1,2].map(k=>{ const p=new THREE.PlaneGeometry(1,1); p.translate(0,0.5,0); p.rotateY(k*Math.PI/3); return p; }));
+  const nr=tg.attributes.normal; for(let i=0;i<nr.count;i++) nr.setXYZ(i,0,1,0);          // lit like the lawn: no dark back faces
+  const mat=new THREE.MeshStandardMaterial({map:tuftTex,alphaTest:0.5,alphaToCoverage:!mobile,side:THREE.DoubleSide,roughness:0.95,metalness:0,envMapIntensity:0.3});
+  const go=()=>Promise.all(['redwhite.json','tyres.json','fences.json'].map(f=>fetch('data/'+f).then(r=>r.json()).catch(()=>[]))).then(([rw,ty,fe])=>{
+    const segs=[]; rw.forEach(([a,b])=>segs.push([a,b,0.45,0.95])); ty.forEach(([a,b])=>segs.push([a,b,0.45,1.0]));
+    fe.forEach(f=>{ for(let i=0;i+1<f.pts.length;i++) segs.push([f.pts[i],f.pts[i+1],0.12,0.6]); });
+    const r=rngFrom(733), out=[], dens=mobile?1.6:3.4;
+    segs.forEach(([a,b,o0,o1])=>{ const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy); if(L<0.05) return; const px_=-dy/L,py=dx/L;
+      for(let k=0,n=Math.ceil(L*dens);k<n;k++){ const t=r(), sd=r()<0.5?-1:1, o=o0+(o1-o0)*r()*r(), e=a[0]+dx*t+px_*o*sd, nn=a[1]+dy*t+py*o*sd;
+        if(surfAt(e,-nn)!=='grass') continue; out.push([e,-nn,r(),r(),r()]); } });
+    const im=new THREE.InstancedMesh(tg,mat,out.length), M=new THREE.Matrix4(), q=new THREE.Quaternion(), c=new THREE.Color(), up=new THREE.Vector3(0,1,0);
+    out.forEach(([x,z,u1,u2,u3],i)=>{ const hgt=0.10+0.24*u1*u1, wd=0.22+0.30*u2; q.setFromAxisAngle(up,u3*6.28);
+      M.compose(new THREE.Vector3(x,0,z),q,new THREE.Vector3(wd,hgt,wd)); im.setMatrixAt(i,M);
+      const f=0.60+0.28*u2; im.setColorAt(i,c.setRGB(f*(0.95+0.2*u3),f,f*(0.85+0.1*u1))); });   // olive, a shade darker than the mown lawn
+    im.receiveShadow=true; im.userData.noAO=true; scene.add(im); window.__tufts=out.length; });
+  const wait=setInterval(()=>{ if(!SURF.loading) driveInit(); if(SURF.ready&&KPTS.size>0){ clearInterval(wait); go(); } },400);   // surface maps load lazily (drive mode); fetch them for placement
+})();
 
 /* ---------- trees: crowns built from leaf-cluster cards ---------- */
 function crownCards(n,seed,cone){
@@ -590,14 +638,14 @@ function crownCards(n,seed,cone){
   for(let k=0;k<nc;k++){ let v; do{ v=new THREE.Vector3(r()*2-1,r()*2-1,r()*2-1); }while(v.length()>1);
     if(cone){ const kk=1-(v.y+1)*0.42; v.x*=kk; v.z*=kk; } C.push(v.multiplyScalar(0.62)); }
   for(let i=0;i<n;i++){
-    const c=C[i%nc], sz=0.5+r()*0.28, p=new THREE.PlaneGeometry(sz,sz);   // many small leaf clusters: a broken, leafy outline (owner: 'not like roblox')
+    const c=C[i%nc], sz=(0.5+r()*0.28)*1.05, p=new THREE.PlaneGeometry(sz,sz);   // AC comparison: smaller cards -> finer, less blobby crowns   // many small leaf clusters: a broken, leafy outline (owner: 'not like roblox')
     let v; do{ v=new THREE.Vector3(r()*2-1,r()*2-1,r()*2-1); }while(v.length()>1);
     p.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(r()*Math.PI,r()*Math.PI,r()*Math.PI)));
     p.translate(c.x+v.x*0.36,c.y+v.y*0.36,c.z+v.z*0.36);
     const pos=p.attributes.position, nr=p.attributes.normal, col=[];
     for(let k=0;k<pos.count;k++){
       const q=new THREE.Vector3(pos.getX(k),pos.getY(k)*0.8+0.3,pos.getZ(k)), d=q.length(); q.normalize(); nr.setXYZ(k,q.x,q.y,q.z);
-      const sh=(0.62+0.38*THREE.MathUtils.clamp(pos.getY(k)*0.55+0.5,0,1))*(0.74+0.26*THREE.MathUtils.clamp(d/0.9,0,1)); col.push(sh,sh,sh);   // softer self-shading: no blotchy cards
+      const sh=(0.57+0.43*THREE.MathUtils.clamp(pos.getY(k)*0.55+0.5,0,1))*(0.69+0.31*THREE.MathUtils.clamp(d/0.9,0,1)); col.push(sh,sh,sh);   // AC comparison: a little more depth inside the crowns (deeper read as black shards)   // softer self-shading: no blotchy cards
     }
     p.setAttribute('color',new THREE.Float32BufferAttribute(col,3)); parts.push(p);
   }
@@ -605,7 +653,7 @@ function crownCards(n,seed,cone){
 }
 fetch('data/trees.json').then(r=>r.json()).then(T=>{
   const ltex=f=>{ const t=tl.load('texture/'+f); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; return t; };
-  const leaf=ltex('leaf_oak2.png'), needle=ltex('leaf_pine2.png');   // leaf_tex.py: many small leaves, soft edges (owner: textures 'not like roblox')
+  const leaf=ltex('leaf_oak3.png'),   /* leaf_tex3.py: irregular leaf clumps (round discs read as bubbles) */ needle=ltex('leaf_pine2.png');   // leaf_tex.py: many small leaves, soft edges (owner: textures 'not like roblox')
   const crownMat=new THREE.MeshStandardMaterial({map:leaf,alphaTest:0.36,alphaToCoverage:!mobile,side:THREE.DoubleSide,
     vertexColors:true,roughness:0.88,metalness:0,envMapIntensity:0.3});
   crownMat.onBeforeCompile=sh=>{ sh.fragmentShader=sh.fragmentShader.replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
@@ -617,7 +665,7 @@ fetch('data/trees.json').then(r=>r.json()).then(T=>{
     const parts=[t]; for(let i=0;i<3;i++){ const b=new THREE.CylinderGeometry(0.035,0.07,0.55,5); b.translate(0,0.27,0);
       b.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.8,i*2.1,0))); b.translate(0,0.78,0); parts.push(b); }
     return mergeGeometries(parts); })();
-  const kinds=[crownCards(76,11,false),crownCards(68,23,false),crownCards(82,37,false),crownCards(58,51,true)];
+  const CK=mobile?1:1.7, kinds=[crownCards(76*CK|0,11,false),crownCards(68*CK|0,23,false),crownCards(82*CK|0,37,false),crownCards(58*CK|0,51,true)];
   /* Florida mix seen in the onboard footage: low scrub, broad live oaks, tall slash pines, cabbage palms */
   const hsh=i=>((Math.imul(i+1,2654435761)>>>0)/4294967296);
   const SP=T.map(([x],i)=>{ const u=hsh(i); if(x<-148) return u<0.30?'pine':(u<0.78?'oak':'scrub');   // lap comparison: the treeline is a dense mass of
@@ -643,12 +691,12 @@ fetch('data/trees.json').then(r=>r.json()).then(T=>{
     if(sp==='scrub'){ trunks.setMatrixAt(i,Z); buckets[i%3].push([i,x,z,1.5+u*2.2,1.3+hsh(i+11)*1.5,'scrub']); return; }
     const pine=sp==='pine'; p.set(x,0,z); q.identity(); s.set(pine?0.75:1.15,pine?h*0.72:h*0.38,pine?0.75:1.15); M.compose(p,q,s); trunks.setMatrixAt(i,M);
     buckets[pine?3:i%3].push([i,x,z,h,r,sp]); });
-  [trunks,ptr,pcr].forEach(m=>{ m.castShadow=true; scene.add(m); });
+  [trunks,ptr,pcr].forEach(m=>{ m.castShadow=true; scene.add(m); }); pcr.userData.noAO=true;
   const oak=[0xf2eadc,0xe6dece,0xfaf0dc,0xe0dacb,0xeee6d4].map(h=>new THREE.Color(h));
   const pin=[0xd8dccc,0xe2e2d2,0xccd2c0].map(h=>new THREE.Color(h)), scr=[0xc8ccb8,0xbcc2ac,0xd2d4c0].map(h=>new THREE.Color(h));
   kinds.forEach((g,k)=>{
     const L=buckets[k]; if(!L.length) return;
-    const im=new THREE.InstancedMesh(g,k===3?pineMat:crownMat,L.length);
+    const im=new THREE.InstancedMesh(g,k===3?pineMat:crownMat,L.length); im.userData.noAO=true;   // alpha-tested cards: kept out of the AO pass (it ignores alpha -> dark shards)
     L.forEach(([i,x,z,hh,r,sp],j)=>{
       if(sp==='scrub'){ p.set(x,hh*0.45,z); s.set(r,hh*0.55,r*(0.85+hsh(i+5)*0.3)); }
       else if(sp==='pine'){ p.set(x,hh*0.8,z); s.set(r*0.78,hh*0.3,r*0.78); }   // fuller crowns (footage), not lollipops
@@ -662,7 +710,7 @@ fetch('data/trees.json').then(r=>r.json()).then(T=>{
   { const R=[]; const rr=rngFrom(91);
     for(let ring=0;ring<3;ring++){ const rad=235+ring*70; const n=Math.round(2*Math.PI*rad/(7+ring*3));
       for(let k=0;k<n;k++){ const a=k/n*2*Math.PI+rr()*0.02, d=rad+(rr()-0.5)*40; R.push([Math.cos(a)*d,Math.sin(a)*d,3+rr()*3,9+rr()*9]); } }
-    const im=new THREE.InstancedMesh(kinds[1],crownMat,R.length), hz=[0xc8ccbc,0xbcc2b0,0xd0d2c0].map(h=>new THREE.Color(h));
+    const im=new THREE.InstancedMesh(kinds[1],crownMat,R.length); im.userData.noAO=true; const hz=[0xc8ccbc,0xbcc2b0,0xd0d2c0].map(h=>new THREE.Color(h));
     R.forEach(([x,z,r,hh],j)=>{ p.set(x,hh*0.55,z); s.set(r*1.6,hh*0.45,r*1.6); q.setFromEuler(new THREE.Euler(0,j*1.7,0)); M.compose(p,q,s); im.setMatrixAt(j,M); im.setColorAt(j,c.copy(hz[j%3])); });
     scene.add(im); }
 }).catch(()=>{});
@@ -1097,6 +1145,46 @@ function flagStand(p){                                 // faces the track along 
   const chk=canvasTex(64,64,(x,w,h)=>{ for(let i=0;i<8;i++) for(let j=0;j<8;j++){ x.fillStyle=(i+j)%2?'#111':'#f4f4f4'; x.fillRect(i*8,j*8,8,8); } });
   L.push([BX(0.6,0.42,0.005,-0.05,H+1.25,W/2-0.05,0,0.08),new THREE.MeshStandardMaterial({map:chk,roughness:0.8,side:THREE.DoubleSide})]);  // chequered flag draped on the rail
   meshes(g,L);
+  buildMarshal(g,H);
+}
+/* ---------- the flag marshal on the stand (owner: 'a guy who actually stands at the flag stand and waves'). Holds the flag rolled
+   on the formation lap, waves the green at the start, the white for the last lap and the chequered at the finish; the race
+   module tells him which flag (T4RACE.flag()). White polo, black trousers, black cap. ---------- */
+const MARSHAL={g:null,arm:null,flag:null,geo:null,mats:{},t:0,cur:null};
+function buildMarshal(stand,H){
+  const M=(c,r)=>new THREE.MeshStandardMaterial({color:c,roughness:r||0.7});
+  const polo=M(0xf2f3f1,0.8), pants=M(0x1c1e22,0.8), skin=M(0xc99a76,0.6), cap=M(0x15171a,0.6), shoe=M(0x111111,0.7);
+  const m=new THREE.Group(); m.position.set(0.05,H+0.025,0.05); stand.add(m);
+  const part=(geo,mat,x,y,z,parent)=>{ const o=new THREE.Mesh(geo,mat); o.position.set(x,y,z); o.castShadow=true; (parent||m).add(o); return o; };
+  for(const sx of [-1,1]){ part(new THREE.CapsuleGeometry(0.075,0.62,4,10),pants,sx*0.1,0.45,0); part(new RoundedBoxGeometry(0.11,0.07,0.24,2,0.03),shoe,sx*0.1,0.035,0.05); }
+  part(new RoundedBoxGeometry(0.42,0.25,0.22,3,0.06),pants,0,0.9,0);                          // hips
+  part(new RoundedBoxGeometry(0.44,0.52,0.24,3,0.09),polo,0,1.24,0);                          // torso
+  part(new THREE.CylinderGeometry(0.055,0.06,0.09,10),skin,0,1.53,0);
+  part(new THREE.SphereGeometry(0.115,16,12),skin,0,1.66,0.0);
+  const c1=part(new THREE.SphereGeometry(0.12,16,10,0,Math.PI*2,0,Math.PI/2),cap,0,1.7,0); const brim=part(new THREE.CylinderGeometry(0.1,0.1,0.012,16),cap,0,1.71,0.09); brim.scale.set(1,1,0.8);
+  const armL=new THREE.Group(); armL.position.set(-0.26,1.44,0); m.add(armL); part(new THREE.CapsuleGeometry(0.05,0.5,4,8),polo,0,-0.3,0,armL); armL.rotation.z=-0.12;
+  const arm=new THREE.Group(); arm.position.set(0.26,1.44,0); m.add(arm);                       // right arm: holds and waves the flag
+  part(new THREE.CapsuleGeometry(0.05,0.5,4,8),polo,0,-0.3,0,arm); part(new THREE.SphereGeometry(0.05,10,8),skin,0,-0.6,0,arm);
+  const stick=part(new THREE.CylinderGeometry(0.009,0.009,0.85,8),M(0x2b2b2b,0.5),0,-0.42,0.05,arm); stick.rotation.x=Math.PI/2*0+0; 
+  const sGroup=new THREE.Group(); sGroup.position.set(0,-0.62,0.02); sGroup.rotation.x=Math.PI; arm.add(sGroup);   // stick hangs down at his side, points up when the arm is raised stick.parent.remove(stick); stick.position.set(0,0.3,0); sGroup.add(stick);
+  const geo=new THREE.PlaneGeometry(0.62,0.44,14,8); geo.translate(0.31,0.5,0); const base=Float32Array.from(geo.attributes.position.array);
+  const chk=canvasTex(128,96,(x,w,h)=>{ for(let i=0;i<8;i++) for(let j=0;j<6;j++){ x.fillStyle=(i+j)%2?'#111':'#f4f4f4'; x.fillRect(i*16,j*16,16,16); } });
+  const flagMat=new THREE.MeshStandardMaterial({color:0x1e9e3e,roughness:0.85,side:THREE.DoubleSide});
+  const flag=new THREE.Mesh(geo,flagMat); flag.castShadow=true; sGroup.add(flag);
+  MARSHAL.g=m; MARSHAL.arm=arm; MARSHAL.flag=flag; MARSHAL.geo=geo; MARSHAL.base=base; MARSHAL.mat=flagMat; MARSHAL.chk=chk;
+}
+function marshalUpdate(dt){ const K=MARSHAL; if(!K.g) return; K.t+=dt;
+  const want=window.T4RACE&&window.T4RACE.active&&window.T4RACE.flag?window.T4RACE.flag():null;   // 'green' | 'white' | 'chequered' | 'yellow' | 'rolled' | null
+  const waving=want&&want!=='rolled';
+  if(want!==K.cur){ K.cur=want; const col={green:0x1e9e3e,white:0xf4f4f4,yellow:0xf2c400,blue:0x2a7de1,chequered:0xffffff,rolled:0x1e9e3e}[want]||0x1e9e3e;
+    K.mat.color.setHex(col); K.mat.map=want==='chequered'?K.chk:null; K.mat.needsUpdate=true; }
+  // arm: down by his side with the flag rolled when idle, raised and swinging side to side when waving
+  const tx=waving?-2.75:-0.15, tz=waving?0.55*Math.sin(K.t*5.2):0.1;
+  K.arm.rotation.x+=(tx-K.arm.rotation.x)*Math.min(1,dt*6); K.arm.rotation.z+=(tz-K.arm.rotation.z)*Math.min(1,dt*10);
+  K.flag.visible=!!waving; K.flag.parent.children[0].visible=true;
+  if(waving){ const P=K.geo.attributes.position, b=K.base; for(let i=0;i<P.count;i++){ const x=b[i*3], y=b[i*3+1];
+      P.setXYZ(i,x,y-0.03*x*x*4,0.07*(x/0.62)*Math.sin(x*9-K.t*12)+0.02*Math.sin(y*6+K.t*7)); }
+    P.needsUpdate=true; K.geo.computeVertexNormals(); }
 }
 function golfCart(p){                                  // local +x = forward
   const g=propGroup(p.c,p.ang||0), L=[];
@@ -1141,13 +1229,15 @@ fetch('data/paint.json').then(r=>r.json()).then(P=>{
     g.setAttribute('normal',new THREE.Float32BufferAttribute([0,1,0,0,1,0,0,1,0],3)); g.setIndex([0,1,2]); parts.push(g); });
   const pm=new THREE.MeshStandardMaterial({color:0xe9e8e2,roughness:0.62,envMapIntensity:0.3,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
   pm.customProgramCacheKey=()=>'paint-wear';
-  pm.onBeforeCompile=sh=>{ sh.uniforms.uDet={value:detail}; sh.uniforms.uAs={value:MT.asph};             // worn road paint: aggregate shows through, tyre-darkened patches (not flat white)
+  pm.onBeforeCompile=sh=>{ sh.uniforms.uDet={value:detail}; sh.uniforms.uAs={value:MT.asph}; sh.uniforms.uRub={value:rubberTex}; sh.uniforms.uGroove={value:grooveTex};             // worn road paint: aggregate shows through, tyre-darkened patches (not flat white)
     sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWPp;').replace('#include <begin_vertex>','#include <begin_vertex>\nvWPp=(modelMatrix*vec4(transformed,1.0)).xyz;');
-    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWPp; uniform sampler2D uDet; uniform sampler2D uAs;')
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWPp; uniform sampler2D uDet; uniform sampler2D uAs; uniform sampler2D uRub; uniform sampler2D uGroove;')
       .replace('#include <map_fragment>',`#include <map_fragment>
         vec2 w=vec2(vWPp.x,-vWPp.z); float n1=texture2D(uDet,w*0.9).r, n2=texture2D(uDet,w*0.11).r, ag=texture2D(uAs,w/1.4).r;
         float wear=smoothstep(0.55,0.8,n1*0.6+n2*0.55);
-        diffuseColor.rgb*=mix(0.86+0.14*n1,0.55,wear*0.55)*mix(1.0,0.82+0.6*ag,0.35);`); };
+        diffuseColor.rgb*=mix(0.86+0.14*n1,0.55,wear*0.7)*mix(1.0,0.82+0.6*ag,0.35);
+        vec2 ruv=vec2((vWPp.x+154.0)/280.0,(6.0-vWPp.z)/116.0); float rb=max(texture2D(uRub,ruv).r,texture2D(uGroove,ruv).r*0.9);                 // AC comparison: lines are off-white and tyre-marked where karts cross them
+        diffuseColor.rgb*=vec3(0.94,0.93,0.90)*(1.0-0.42*smoothstep(0.08,0.6,rb)*(0.6+0.4*n1));`); };
   const m=new THREE.Mesh(mergeGeometries(parts),pm);
   m.receiveShadow=true; scene.add(m);
 }).catch(()=>{});
@@ -1166,16 +1256,17 @@ fetch('data/paint.json').then(r=>r.json()).then(P=>{
 const KTEX={};
 function kartTextures(){
   if(KTEX.plate) return KTEX;
-  const plate=(w,h)=>canvasTex(w,h,(x,W,H)=>{ x.fillStyle='#f4d21c'; x.fillRect(0,0,W,H); x.fillStyle='#0d0d0d'; x.font='900 '+Math.round(H*0.78)+'px Archivo, Arial, sans-serif';
-    x.textAlign='center'; x.textBaseline='middle'; x.fillText('13',W/2,H*0.54); });
-  KTEX.plate=plate(256,192); KTEX.plateWide=plate(384,160);
+  const plate=(w,h,num)=>canvasTex(w,h,(x,W,H)=>{ x.fillStyle='#f4d21c'; x.fillRect(0,0,W,H); x.fillStyle='#0d0d0d'; x.font='900 '+Math.round(H*0.78)+'px Archivo, Arial, sans-serif';
+    x.textAlign='center'; x.textBaseline='middle'; x.fillText(String(num||13),W/2,H*0.54); });
+  KTEX.plateFn=plate; KTEX.plate=plate(256,192); KTEX.plateWide=plate(384,160);
   const LB='#2b9fe0', DB='#123f8f', OR='#f2701d', WH='#f5f6f4';
-  KTEX.pod=canvasTex(512,128,(x,W,H)=>{ x.fillStyle=LB; x.fillRect(0,0,W,H);                              // KG 506 side pod sticker (T4 kit): light blue, white window, orange chevrons, dark-blue base
+  KTEX.podFn=(num)=>canvasTex(512,128,(x,W,H)=>{ x.fillStyle=LB; x.fillRect(0,0,W,H);                              // KG 506 side pod sticker (T4 kit): light blue, white window, orange chevrons, dark-blue base
     x.fillStyle=WH; x.beginPath(); x.moveTo(W*0.18,H*0.22); x.lineTo(W*0.82,H*0.30); x.lineTo(W*0.74,H*0.78); x.lineTo(W*0.26,H*0.72); x.closePath(); x.fill();
     x.strokeStyle=OR; x.lineWidth=7; x.beginPath(); x.moveTo(W*0.20,H*0.76); x.lineTo(W*0.30,H*0.48); x.lineTo(W*0.20,H*0.24); x.stroke();
     x.beginPath(); x.moveTo(W*0.86,H*0.30); x.lineTo(W*0.94,H*0.52); x.lineTo(W*0.86,H*0.74); x.stroke();
     x.fillStyle=DB; x.fillRect(0,H*0.84,W,H*0.16); x.beginPath(); x.moveTo(0,H*0.84); x.lineTo(W*0.12,H*0.6); x.lineTo(W*0.12,H*0.84); x.fill();
-    x.fillStyle='#f4d21c'; x.fillRect(W*0.40,H*0.36,W*0.20,H*0.30); x.fillStyle='#0d0d0d'; x.font='900 40px Archivo, Arial, sans-serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('13',W*0.5,H*0.52); });
+    x.fillStyle='#f4d21c'; x.fillRect(W*0.40,H*0.36,W*0.20,H*0.30); x.fillStyle='#0d0d0d'; x.font='900 40px Archivo, Arial, sans-serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(String(num),W*0.5,H*0.52); });
+  KTEX.pod=KTEX.podFn(13);
   KTEX.nose=canvasTex(256,128,(x,W,H)=>{ x.fillStyle=LB; x.fillRect(0,0,W,H);                              // KG 506 front spoiler sticker
     x.fillStyle=WH; x.beginPath(); x.moveTo(W*0.30,0); x.lineTo(W*0.70,0); x.lineTo(W*0.62,H*0.62); x.lineTo(W*0.38,H*0.62); x.fill();
     x.fillStyle=OR; x.fillRect(W*0.44,H*0.68,W*0.12,H*0.10); x.strokeStyle=OR; x.lineWidth=4; x.beginPath(); x.moveTo(W*0.08,H*0.2); x.lineTo(W*0.22,H*0.7); x.moveTo(W*0.92,H*0.2); x.lineTo(W*0.78,H*0.7); x.stroke();
@@ -1211,7 +1302,7 @@ function timerDraw(dt,rpm,force){
   lab('LAST',16,236); val(DRV.last?fmtT(DRV.last).replace(/^0:/,''):'--.---',14,276,32);
   const d=DRV.delta; lab('DELTA',200,164); val(d==null?'--.--':(d>0?'+':'')+d.toFixed(2),196,214,48,d==null?'#f2f5f7':d>0?'#ff4d42':'#2bd36b');
   lab('CHT',380,164); val(Math.round(TIMER.cht)+'°',496,204,32,TIMER.cht>205?'#ff8a3d':null,'right');
-  lab('BATT',380,236); x.strokeStyle='#7f8a94'; x.strokeRect(430,248,56,24); x.fillStyle='#2bd36b'; x.fillRect(433,251,44,18); x.fillRect(486,255,4,10);
+  const tt=DRV.tyreT??TYRE.amb; lab('TYRE',380,236); val(Math.round(tt)+'\u00b0',496,276,32,tt<45?'#5ab4ff':tt<=82?'#2bd36b':'#ff4d42','right');   // blue cold, green in the window, red hot
   TIMER.tex.needsUpdate=true;
 }
 function buildT4Kart(opt={}){
@@ -1221,7 +1312,8 @@ function buildT4Kart(opt={}){
     rim:M(0x8d949b,0.32,0.9), alu:M(0xa9b0b7,0.3,0.9), dark:M(0x2a2c2f,0.45,0.6), eng:M(0x6e7378,0.4,0.7), fins:M(0x9aa1a8,0.35,0.85), orange:M(0xe0701e,0.4,0.5),
     tank:M(0xece8dc,0.4,0,0.5,{transparent:true,opacity:0.88}), white:M(0xf4f5f3,0.42,0.02), blue:M(0x1d9ad6,0.36,0.05), navy:M(0x123c78,0.4,0.05),
     grip:M(0xf1f1ee,0.8,0), tape:M(0xd8332a,0.6,0), seat:M(0xc6cbd0,0.32,0.75,0.8,{map:T.weave}), red:M(0xc8232c,0.5,0),
-    pod:M(0xffffff,0.4,0.02,0.7,{map:T.pod}), nose:M(0xffffff,0.4,0.02,0.7,{map:T.nose}), plate:M(0xffffff,0.45,0,0.6,{map:T.plate}), plateW:M(0xffffff,0.45,0,0.6,{map:T.plateWide,side:THREE.DoubleSide}),
+    pod:M(0xffffff,0.4,0.02,0.7,{map:opt.num?T.podFn(opt.num):T.pod}), nose:M(0xffffff,0.4,0.02,0.7,{map:T.nose}),
+    plate:M(0xffffff,0.45,0,0.6,{map:opt.num?T.plateFn(256,192,opt.num):T.plate}), plateW:M(0xffffff,0.45,0,0.6,{map:opt.num?T.plateFn(384,160,opt.num):T.plateWide,side:THREE.DoubleSide}),
     chain:M(0xc9a13a,0.35,0.9), gold:M(0xd6ab3c,0.28,0.95), rimB:M(0x1b1c1e,0.35,0.6), guard:M(0x8a8f94,0.5,0.1), panel:M(0xffffff,0.4,0.02,0.7,{map:T.panel}),
     led:null, disc:M(0x27292c,0.35,0.7), screen:new THREE.MeshBasicMaterial({map:timerTex(),toneMapped:false})};
   const V=(a)=>new THREE.Vector3(a[0],a[1],a[2]);
@@ -1329,7 +1421,7 @@ function buildT4Kart(opt={}){
     const leds=[]; for(let i=0;i<10;i++){ const m=new THREE.Mesh(new THREE.SphereGeometry(0.0042,10,8),new THREE.MeshBasicMaterial({color:0x1a1f24,toneMapped:false}));
       m.position.set(-0.0585+i*0.013,0.085,-0.031); sw.add(m); leds.push(m); } g.userData.leds=leds; }
   // driver (outside cameras / ghost only)
-  if(opt.driver){ const S=M(0x1d2026,0.75,0.05), Hm=M(0xf3f3f1,0.22,0.25), Vi=M(0x101317,0.08,0.6);
+  if(opt.driver){ const S=M(0x1d2026,0.75,0.05), Hm=M(opt.helmet??0xf3f3f1,0.22,0.25), Vi=M(0x101317,0.08,0.6);
     box(0.36,0.46,0.22,S,[-0.02,0.42,-0.38],[-0.3,0,0],0.07); put(new THREE.SphereGeometry(0.135,18,14),Hm,[-0.02,0.84,-0.30]);
     put(new THREE.SphereGeometry(0.137,18,10,-1.1,2.2,1.25,0.55),Vi,[-0.02,0.84,-0.30]);
     mir(s=>{ tube([[s*0.17-0.02,0.58,-0.34],[s*0.16,0.52,0.0],[s*0.13,0.52,0.14]],0.04,S); tube([[s*0.12-0.02,0.15,-0.22],[s*0.10,0.17,0.40],[s*0.09,0.16,0.62]],0.05,S); }); }
@@ -1409,6 +1501,7 @@ fetch('data/bestline.json').then(r=>r.ok?r.json():null).then(d=>{ if(!d||!d.ghos
     o.material.color.lerp(new THREE.Color(0x9fe6ff),0.55); if(o.material.emissive) o.material.emissive=new THREE.Color(0x0a2a3a); o.castShadow=false; } });   // (timer screen / LEDs are basic materials)
   g.visible=false; scene.add(g); GHOST.mesh=g; }).catch(()=>{});
 document.getElementById('bGhost').onclick=e=>{ GHOST.on=!GHOST.on; e.target.classList.toggle('on',GHOST.on); };
+window.__t4race={THREE,scene,buildT4Kart,get DRV(){ return DRV; },physics,get KM(){ return KM; },flash,fmtT,driveStart,GHOST,get LINE(){ return LINE; },get shake(){ return shake; },set shake(v){ shake=v; }};
 { const sc=document.createElement('script'); sc.src='lineopt.js'; sc.onload=()=>{ try{ window.T4OPT&&window.T4OPT.liveStart&&window.T4OPT.liveStart(); }catch(e){ console.warn('AI live learning',e); } }; document.head.appendChild(sc); }   // owner: the AI learns every lap
 function ghostUpdate(){ const G=GHOST; if(!G.mesh) return;
   if(G.pending&&(!DRV.lapOn||DRV.lapT<0.3)){ G.pts=G.pending.pts; G.lap=G.pending.lap; G.pending=null; }   // the AI learned a faster lap: race that one from your next lap
@@ -1423,7 +1516,7 @@ document.getElementById('bNight').onclick=e=>{
     scene.background=new THREE.Color(0x05080f); scene.fog.color.set(0x090e17); sun.intensity=0; hemi.intensity=0.07;
     floodGroup.visible=true; lampMat.emissiveIntensity=7; renderer.toneMappingExposure=1.15; bloom.threshold=0.96; bloom.strength=0.14; bloom.enabled=true; }
   else { scene.environment=DAY.env; skyMesh.visible=true; clouds.visible=true; scene.background=null; scene.fog.color.copy(DAY.fog);
-    sun.intensity=7.2; hemi.intensity=1.1; floodGroup.visible=false; lampMat.emissiveIntensity=0; renderer.toneMappingExposure=DAY.exp; bloom.threshold=2.4; bloom.strength=0.1; bloom.enabled=false; }
+    sun.intensity=7.6; hemi.intensity=0.85; floodGroup.visible=false; lampMat.emissiveIntensity=0; renderer.toneMappingExposure=DAY.exp; bloom.threshold=2.4; bloom.strength=0.1; bloom.enabled=false; }
 };
 document.getElementById('bTop').onclick=()=>{ pos.set(-10,320,-45); yaw=Math.PI; pitch=-1.5695; mode='free'; speed=60; mark('bTop'); };
 
@@ -1515,6 +1608,10 @@ const KM={m:140,Iz:38,a:0.60,b:0.44,mu0:1.90,CdA:0.50,hcg:0.21,B:26,C:1.25,fF:1.
     let T=K.Tq[K.Tq.length-1][1]; for(let i=1;i<K.Tq.length;i++){ if(rpm<=K.Tq[i][0]){ const [r0,t0]=K.Tq[i-1],[r1,t1]=K.Tq[i]; T=t0+(t1-t0)*Math.max(0,rpm-r0)/(r1-r0); break; } }
     return T*K.gear/K.rT*K.eta; },                                                           // N at the rear tyres
   rpm(v){ return Math.max(this.clutch,Math.max(v,0)*60*this.gear/(2*Math.PI*this.rT)); }};
+/* tyre temperature (owner: 'add tyre warming'): starts at the air temperature, ~0.86 grip cold, full grip 55-80 C, a little
+   less when overheated. Warms in about a lap of racing (time constant ~30 s); weaving on the formation lap helps. */
+const TYRE={amb:30,kHeat:0.010,kCool:0.020};
+function tyreGrip(T){ return T<30?0.86:T<55?0.86+0.14*(T-30)/25:T<=80?1.0:Math.max(0.94,1.0-(T-80)*0.003); }
 KM.vmax=KM.lim*2*Math.PI*KM.rT/(60*KM.gear);                                                // 29.4 m/s at the limiter (19/71)
 KM.Fdrive=Math.max(...[0,3,6,9,12,15,18].map(v=>KM.drive(v))); KM.P=Math.max(...Array.from({length:30},(_,k)=>KM.drive(k)*k));   // for the lap model / reports
 function tyre(alpha,mu,N){ return mu*N*Math.sin(KM.C*Math.atan(KM.B*alpha)); }
@@ -1563,7 +1660,7 @@ function driveStart(fromGrid){
   T_IDX=nearestLine(13.8,-18.3,0);
   if(fromGrid&&PTS){ const [x,z,yw]=PTS.start[0]; DRV.x=x; DRV.z=z; DRV.h=yw; }
   else { const i=nearestLine(pos.x,pos.z,DRV.sIdx), j=(i+4)%LINE.length; DRV.x=LINE[i][0]; DRV.z=LINE[i][1]; DRV.h=Math.atan2(LINE[j][0]-LINE[i][0],LINE[j][1]-LINE[i][1]); }
-  DRV.vx=DRV.vz=DRV.rr=0; DRV.steer=0; DRV.lapOn=false; DRV.lapT=0; DRV.valid=true; DRV.g1=DRV.g2=false; DRV.sIdx=nearestLine(DRV.x,DRV.z,0);
+  DRV.vx=DRV.vz=DRV.rr=0; DRV.steer=0; DRV.lapOn=false; DRV.lapT=0; DRV.valid=true; DRV.g1=DRV.g2=false; DRV.sIdx=nearestLine(DRV.x,DRV.z,0); DRV.tyreT=TYRE.amb;
   DRV.cur=[0,0,0]; DRV.msgT=0; DRV.wrong=0; mode='drive'; tv=false; document.getElementById('bTV').classList.remove('on'); mark('bDrive'); audioOn();
 }
 function driveReset(){ const i=nearestLine(DRV.x,DRV.z,DRV.sIdx), j=(i+4)%LINE.length;
@@ -1703,7 +1800,8 @@ function physics(h){
   // wheel positions -> surfaces
   const wp=(fx,lx)=>[DRV.x+sh*fx+ch*lx, DRV.z+ch*fx-sh*lx];
   const S=[surfAt(...wp(0.52,0.55)),surfAt(...wp(0.52,-0.55)),surfAt(...wp(-0.5,0.6)),surfAt(...wp(-0.5,-0.6))];
-  const muF=KM.mu0*KM.fF*(SURFP[S[0]].mu+SURFP[S[1]].mu)/2, muR=KM.mu0*KM.fR*(SURFP[S[2]].mu+SURFP[S[3]].mu)/2;
+  if(DRV.tyreT==null) DRV.tyreT=TYRE.amb; const tg=tyreGrip(DRV.tyreT);             // owner: tyre warming - cold Maxxis slicks grip less
+  const muF=KM.mu0*KM.fF*tg*(SURFP[S[0]].mu+SURFP[S[1]].mu)/2, muR=KM.mu0*KM.fR*tg*(SURFP[S[2]].mu+SURFP[S[3]].mu)/2;
   const crr=S.reduce((t,q)=>t+SURFP[q].crr,0)/4;   // (kerb grip loss while the tyres are bouncing over the hump is applied below)
   DRV.kerb=S.filter(q=>q==='kerb').length; DRV.surf=S[2]===S[3]?S[2]:S[0];
   const WP=[wp(0.52,0.55),wp(0.52,-0.55),wp(-0.5,0.6),wp(-0.5,-0.6)], WH=WP.map(p=>kerbH(p[0],p[1]));   // the kart rides up the kerb humps
@@ -1720,7 +1818,8 @@ function physics(h){
   const dmax=0.34/(1+u*u/(PADC.wheel?1600:420)), delta=DRV.steer*dmax;     // owner: steering turned down (0.42 -> 0.34 rad max); wheel steers direct, pad keeps a light cap
   let Fx=0;
   if(DRV.thr>0.02&&u>-0.5) Fx=DRV.thr*KM.drive(u)*Math.min(1,Math.max(0,(KM.vmax-u)/0.6));   // torque curve through the fixed gearing; limiter 7,500 rpm
-  if(DRV.brk>0.02){ if(u>0.4) Fx-=DRV.brk*KM.m*g*1.2; else { DRV.rev+=h; if(DRV.rev>0.35&&u>-3) Fx-=DRV.brk*KM.m*g*0.15; } } else DRV.rev=0;
+  if(DRV.brk>0.02&&u>0.05) Fx-=DRV.brk*KM.m*g*1.2*Math.min(1,u/0.6);   // owner: no reverse - a T4 Jr only has gas and brake
+  if(DRV.vlim>0&&u>DRV.vlim) Fx=Math.min(Fx,-(u-DRV.vlim)*KM.m*1.2);      // race: formation-lap / cool-down limiter
   // loads with longitudinal transfer, from the force the rear tyres can actually take
   let Nf=KM.m*g*KM.b/L, Nr=KM.m*g*KM.a/L, Fxr=Fx;
   for(let it=0;it<3;it++){ const dN=Fxr*KM.hcg/L; Nf=Math.max(0,KM.m*g*KM.b/L-dN); Nr=Math.max(0,KM.m*g*KM.a/L+dN);
@@ -1743,6 +1842,8 @@ function physics(h){
   DRV.h+=DRV.rr*h; DRV.x+=DRV.vx*h; DRV.z+=DRV.vz*h;
   collide();
   DRV.slip=Math.abs(ar)+Math.abs(af-delta*0); DRV.u=u; DRV.latG=(DRV.vx*ch-DRV.vz*sh)*0+Fl/KM.m/9.81;
+  { const aL=Math.abs(Fl)/KM.m, aX=Math.abs(Fb)/KM.m, slip=Math.min(0.4,DRV.slip||0);
+    DRV.tyreT+=h*(TYRE.kHeat*(aL+0.6*aX)*sp*(0.5+4*slip)-TYRE.kCool*(DRV.tyreT-TYRE.amb)*(1+sp*0.04)); }
 }
 function collide(){
   const ch=Math.cos(DRV.h), sh=Math.sin(DRV.h);
@@ -1800,10 +1901,22 @@ const rt=new THREE.WebGLRenderTarget(2,2,{type:THREE.HalfFloatType,samples:mobil
 const composer=new EffectComposer(renderer,rt);
 composer.addPass(new RenderPass(scene,cam));
 let gtao=null;                                             // ground-contact ambient occlusion: kerbs, barriers, tyres and buildings sit in soft shadow like the onboard footage
-if(!mobile){ try{ gtao=new GTAOPass(scene,cam,innerWidth,innerHeight); gtao.updateGtaoMaterial({radius:0.6,distanceExponent:1.4,thickness:1.2,scale:1.0,samples:12});
-  gtao.updatePdMaterial({lumaPhi:10,depthPhi:2,normalPhi:3,radius:6,rings:2,samples:12}); gtao.blendIntensity=0.85; composer.addPass(gtao); }catch(e){ gtao=null; } }
+if(!mobile){ try{ gtao=new GTAOPass(scene,cam,innerWidth,innerHeight); gtao.updateGtaoMaterial({radius:0.95,distanceExponent:1.5,thickness:1.4,scale:1.15,samples:12});   // AC comparison: darker contact shadow under barriers, kerbs, karts
+  gtao.updatePdMaterial({lumaPhi:10,depthPhi:2,normalPhi:3,radius:6,rings:2,samples:12}); gtao.blendIntensity=1.0; composer.addPass(gtao);
+  const ov=gtao.overrideVisibility.bind(gtao); gtao.overrideVisibility=function(){ ov(); this.scene.traverse(o=>{ if(o.userData.noAO) o.visible=false; }); };   // leaf / grass cards out of the normal+depth pre-pass
+}catch(e){ gtao=null; } }
 const bloom=new UnrealBloomPass(new THREE.Vector2(512,512),0.1,0.5,2.4); composer.addPass(bloom); bloom.enabled=false;   // only at night (floodlights); in daylight it cost 5 passes for no visible effect   // day: only glints and the sun bloom (sunlit white walls are ~1.5 in HDR and glowed at 0.96)
 composer.addPass(new OutputPass());
+const GRADE=new ShaderPass({uniforms:{tDiffuse:{value:null},uSat:{value:0.90},uCon:{value:1.06},uVig:{value:0.16},uWarm:{value:0.012}},   // AC comparison: film-like grade -
+  vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',                 // slightly muted colours, gentle S-curve, soft vignette
+  fragmentShader:`uniform sampler2D tDiffuse; uniform float uSat,uCon,uVig,uWarm; varying vec2 vUv;
+    void main(){ vec4 c=texture2D(tDiffuse,vUv); float l=dot(c.rgb,vec3(0.2126,0.7152,0.0722));
+      vec3 g=mix(vec3(l),c.rgb,uSat); g=clamp((g-0.5)*uCon+0.5,0.0,1.0); g=mix(g,g*g*(3.0-2.0*g),0.12);
+      g+=vec3(uWarm,uWarm*0.4,-uWarm)*(1.0-l);                      // a touch of warmth in the shadows, like a sunny camera grade
+      vec2 d=vUv-0.5; g*=1.0-uVig*smoothstep(0.25,0.85,dot(d,d)*2.2);
+      gl_FragColor=vec4(g,c.a); }`});
+composer.addPass(GRADE);
+window.__fx={get gtao(){return gtao;},GRADE,hemi,sun,scene};   // test hook (look tuning)
 
 
 function updateShadow(){
@@ -1838,7 +1951,7 @@ function loop(){
     yaw+=dy*Math.min(1,dt*6); pitch+=(-0.05-pitch)*Math.min(1,dt*4);
     shakeY=Math.sin(t*37)*0.0022+Math.sin(t*23.3)*0.0016;
   } else if(mode==='drive'&&TOTAL){
-    const px0=DRV.x,pz0=DRV.z; driveStep(dt); lapLogic(dt,px0,pz0);
+    const px0=DRV.x,pz0=DRV.z; driveStep(dt); lapLogic(dt,px0,pz0); if(window.T4RACE&&window.T4RACE.active) window.T4RACE.step(dt);
     const ch=Math.cos(DRV.h), sh=Math.sin(DRV.h), spd=Math.hypot(DRV.vx,DRV.vz);
     if(!drag) DRV.look*=Math.max(0,1-dt*3);
     const WH=DRV.wh||[0,0,0,0], kf=Math.min(1,dt*30);
@@ -1871,7 +1984,7 @@ function loop(){
   if(mode!=='drive'){ engineSound(0,0); kerbSound(0,0); }
   const low=pos.y<2.5;
   const tvOn=tv&&mode==='lap'&&TVC.length>0, chaseOn=mode==='drive'&&DRV.chase;
-  kart.visible=showKart&&low&&!tvOn&&!chaseOn; extKart.visible=tvOn||chaseOn; ghostUpdate();
+  kart.visible=showKart&&low&&!tvOn&&!chaseOn; extKart.visible=tvOn||chaseOn; ghostUpdate(); marshalUpdate(dt);
   if(kart.visible){ if(mode==='drive'){ kart.position.set(DRV.x,DRV.ky||0,DRV.z); kart.rotation.set(-(DRV.kp||0),DRV.h,-(DRV.kr||0),'YXZ'); }
     else { kart.position.set(pos.x+Math.sin(yaw)*0.36,Math.max(0,pos.y-0.95),pos.z+Math.cos(yaw)*0.36); kart.rotation.set(0,yaw,0); } }   // never below the track
   if(mode==='drive'){ const u=Math.max(0,DRV.u||0), r=DRV.thr>0.05||u>4?KM.rpm(u):1800+Math.max(0,u)*120;                 // lap timer: rpm through the clutch, cylinder-head temperature
